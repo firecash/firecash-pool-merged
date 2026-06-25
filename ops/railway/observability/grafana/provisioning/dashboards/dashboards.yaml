@@ -1,0 +1,18 @@
+# Grafana dashboard provider (B5). Loads JSON dashboards from disk so they are
+# version-controlled here rather than edited in the UI. Dashboards are baked into
+# the image at /etc/grafana/dashboards — NOT under /var/lib/grafana, which is the
+# persistent Railway volume (a volume mount there would shadow baked files).
+
+apiVersion: 1
+
+providers:
+  - name: katpool
+    orgId: 1
+    folder: katpool
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: true

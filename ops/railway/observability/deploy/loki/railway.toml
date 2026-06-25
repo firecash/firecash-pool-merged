@@ -1,0 +1,13 @@
+# Root Directory = ops/railway/observability ; Config File = deploy/loki/railway.toml
+# Volume mounted at /loki; set RAILWAY_RUN_UID=0 for volume writes.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "deploy/loki/Dockerfile"
+watchPatterns = ["loki/**", "deploy/loki/**"]
+
+[deploy]
+healthcheckPath = "/ready"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+numReplicas = 1

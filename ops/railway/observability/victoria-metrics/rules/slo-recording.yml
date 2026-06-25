@@ -1,0 +1,44 @@
+# vmalert recording rules — SLIs for the katpool SLOs (B6).
+#
+# These precompute the service-level indicators referenced in SLO.md so
+# dashboards and alert thresholds share one definition. Recorded series are
+# written back to VictoriaMetrics (vmalert -remoteWrite.url). Naming follows
+# the Prometheus `level:metric:operation` convention.
+
+groups:
+  - name: katpool-sli
+    interval: 30s
+    rules:
+      # Share-accept ratio (valid / total) over 5m — share-quality SLI.
+      - record: katpool:share_accept_ratio:rate5m
+        expr: >-
+          sum(rate(ks_valid_share_counter[5m]))
+            / clamp_min(
+                sum(rate(ks_valid_share_counter[5m])) + sum(rate(ks_invalid_share_counter[5m])),
+                1)
+
+      # Public API availability (fraction of successful /ready probes) over 5m.
+      - record: katpool:api_availability:ratio5m
+        expr: avg_over_time(probe_success{probe="api", instance=~".*/ready"}[5m])
+
+      # Block-confirm rate: node-accepted blocks that confirmed blue, 1h window.
+      - record: katpool:block_confirm_rate:ratio1h
+        expr: >-
+          1 - (
+            sum(increase(ks_blocks_not_confirmed_blue[1h]))
+              / clamp_min(sum(increase(ks_blocks_accepted_by_node[1h])), 1)
+          )
+
+      # Total pool hashrate proxy from share difficulty (TH/s depends on the
+      # share-diff→hashes constant; exposed raw here, scaled in the dashboard).
+      - record: katpool:share_diff:rate5m
+        expr: sum(rate(ks_valid_share_diff_counter[5m]))
+
+      # Share-accept latency p99 over 5m (submit → accepted), seconds. Exposed
+      # for dashboards; no alert until a latency objective is set in SLO.md.
+      - record: katpool:share_accept_latency:p99_5m
+        expr: >-
+          histogram_quantile(
+            0.99,
+            sum(rate(ks_share_accept_latency_seconds_bucket[5m])) by (le)
+          )

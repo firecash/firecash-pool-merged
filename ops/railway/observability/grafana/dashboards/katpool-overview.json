@@ -1,0 +1,164 @@
+{
+  "uid": "katpool-overview",
+  "title": "katpool — Pool Overview",
+  "tags": ["katpool"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "API availability (5m)",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.99 },
+              { "color": "green", "value": 0.999 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        { "refId": "A", "expr": "katpool:api_availability:ratio5m" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Share accept ratio (5m)",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.9 },
+              { "color": "green", "value": 0.95 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        { "refId": "A", "expr": "katpool:share_accept_ratio:rate5m" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Block confirm rate (1h)",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.8 },
+              { "color": "green", "value": 0.95 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        { "refId": "A", "expr": "katpool:block_confirm_rate:ratio1h" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Network hashrate",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "fieldConfig": { "defaults": { "unit": "H/s" } },
+      "targets": [
+        { "refId": "A", "expr": "max(ks_estimated_network_hashrate_gauge)" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Share rate (valid vs invalid)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "fieldConfig": { "defaults": { "unit": "shares/s" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(ks_valid_share_counter[5m]))", "legendFormat": "valid" },
+        { "refId": "B", "expr": "sum(rate(ks_invalid_share_counter[5m]))", "legendFormat": "invalid (all)" },
+        { "refId": "C", "expr": "sum(rate(ks_invalid_share_counter[5m])) by (type)", "legendFormat": "{{type}}" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Blocks (mined / accepted / not-confirmed-blue, 1h increase)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(ks_blocks_mined[1h]))", "legendFormat": "mined" },
+        { "refId": "B", "expr": "sum(increase(ks_blocks_accepted_by_node[1h]))", "legendFormat": "accepted" },
+        { "refId": "C", "expr": "sum(increase(ks_blocks_not_confirmed_blue[1h]))", "legendFormat": "not confirmed blue" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Accountant event pipeline (rate by variant)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "fieldConfig": { "defaults": { "unit": "events/s" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(ks_accountant_events_total[5m])) by (variant)", "legendFormat": "{{variant}}" },
+        { "refId": "B", "expr": "sum(rate(ks_accountant_event_errors_total[5m]))", "legendFormat": "errors" },
+        { "refId": "C", "expr": "increase(ks_accountant_events_lagged_total[5m])", "legendFormat": "lagged" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Anti-abuse rejections (rate)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "fieldConfig": { "defaults": { "unit": "ops/s" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(ks_anti_abuse_connection_reject_total[5m]))", "legendFormat": "connection rejects" },
+        { "refId": "B", "expr": "sum(rate(ks_anti_abuse_frame_rate_limited_total[5m]))", "legendFormat": "frame rate-limited" },
+        { "refId": "C", "expr": "sum(rate(ks_anti_abuse_malformed_frame_total[5m]))", "legendFormat": "malformed frames" },
+        { "refId": "D", "expr": "sum(rate(ks_anti_abuse_bad_address_total[5m]))", "legendFormat": "bad address" }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Synthetic probes (success)",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "fieldConfig": { "defaults": { "unit": "bool", "min": 0, "max": 1 } },
+      "targets": [
+        { "refId": "A", "expr": "probe_success", "legendFormat": "{{probe}} {{instance}}" }
+      ]
+    }
+  ]
+}

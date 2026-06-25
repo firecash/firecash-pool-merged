@@ -1,0 +1,18 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "window_secs": 3600,
+  "total": 12,
+  "by_reason": [
+    {
+      "reason": "low_difficulty",
+      "count": 7
+    },
+    {
+      "reason": "bad_pow",
+      "count": 5
+    }
+  ]
+}

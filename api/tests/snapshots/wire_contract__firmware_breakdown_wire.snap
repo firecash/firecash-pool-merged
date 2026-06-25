@@ -1,0 +1,24 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "window_secs": 86400,
+  "entries": [
+    {
+      "app": "IceRiverMiner/1.2.0",
+      "workers": 8,
+      "sessions": 11
+    },
+    {
+      "app": "GodMiner/1.0",
+      "workers": 3,
+      "sessions": 4
+    },
+    {
+      "app": null,
+      "workers": 0,
+      "sessions": 2
+    }
+  ]
+}

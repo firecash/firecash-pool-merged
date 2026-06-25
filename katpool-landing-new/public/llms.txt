@@ -1,0 +1,31 @@
+# Kat Pool — Open-Source Kaspa (KAS) Mining Pool
+
+> Kat Pool is a fully open-source Kaspa mining pool with a globally distributed anycast stratum, transparent PROP (proportional) payouts, and NACHO fee rebates that cut the effective fee to as low as 0%. It is positioned as the transparent, lower-fee alternative to closed-source pools such as HumPool.
+
+## Key facts
+- Reward scheme: PROP (proportional) — each matured block's reward is shared across miners by their contribution over a recent-share window.
+- Fees: 0.75% topline, 33% rebated in NACHO (about 0.5% effective). Holders of NACHO tokens (100M+), Nacho Kats NFTs, or KATCLAIM NFTs get 100% of the fee back as NACHO — a 0% effective fee.
+- Minimum payout: 10 KAS. A portion of fees is returned as NACHO (KRC-20) each payout cycle.
+- Stratum host: kas.katpool.com, ports 1111-8888 with vardiff. Global anycast routes miners to the nearest of seven regions.
+- Hardware: all Kaspa kHeavyHash ASICs (IceRiver KS series, Bitmain KS/KA series).
+- Open source: the full stack is public on GitHub; payouts are auditable.
+
+## Links
+- Home: https://katpool.com
+- Kaspa mining guide: https://katpool.com/kaspa-mining-pool
+- Best Kaspa mining pools compared: https://katpool.com/compare
+- Kaspa mining calculator: https://katpool.com/kaspa-mining-calculator
+- Kaspa ASIC miner guide: https://katpool.com/kaspa-asic-miners
+- Kat Pool vs HumPool: https://katpool.com/vs/humpool
+- Live pool stats: https://katpool.com/stats
+- Blog (Kaspa mining guides): https://katpool.com/blog
+- About: https://katpool.com/about
+- Dashboard (live stats): https://app.katpool.com
+- Start mining: https://app.katpool.com/start
+- Source code: https://github.com/Nacho-the-Kat/katpool
+- X / Twitter: https://x.com/Katpool_Mining
+
+## How to start mining Kaspa on Kat Pool
+1. Point your ASIC at stratum+tcp://kas.katpool.com on a port from 1111 to 8888 (vardiff on every port; 3333 is a good default).
+2. Set the worker username to your Kaspa wallet address (kaspa:...). No account or signup is required.
+3. Start hashing — anycast routes you to the nearest region and your address appears on the dashboard within a minute.

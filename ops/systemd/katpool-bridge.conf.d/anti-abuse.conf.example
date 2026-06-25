@@ -1,0 +1,36 @@
+; Drop-in override example: anti-abuse tunables.
+;
+; Copy to /etc/systemd/system/katpool-bridge.service.d/anti-abuse.conf
+; (drop the `.example` suffix), edit the values, then run:
+;
+;   sudo systemctl daemon-reload
+;   sudo systemctl restart katpool-bridge
+;
+; Defaults if unset (see `bridge/src/anti_abuse.rs`):
+;
+;   KATPOOL_ANTI_ABUSE_MAX_CONN_PER_IP=256
+;   KATPOOL_ANTI_ABUSE_MAX_TRACKED_IPS=65536
+;   KATPOOL_ANTI_ABUSE_FRAME_RATE_PER_SEC=100
+;   KATPOOL_ANTI_ABUSE_FRAME_BURST=200
+;
+; Tuning notes:
+;
+; - max_conn_per_ip: legitimate large farms can host hundreds of ASICs
+;   behind a single NAT. Set this to "worst case farm size × 1.5".
+; - max_tracked_ips: protects HashMap memory under DDoS. Each entry is
+;   ~64 bytes; 65,536 → ~4 MiB worst case.
+; - frame_rate_per_sec: typical stratum traffic is 1-5 frames/sec/ASIC.
+;   100 leaves >20× headroom while still catching obvious floods.
+; - frame_burst: maximum legal short-term burst. Should be ≥ the largest
+;   batch a legitimate miner might send (mining.subscribe + authorize +
+;   set_difficulty + the first few submits ≈ 5-10 frames).
+;
+; Malformed values fail-fast at start-up (the unit will report
+; "anti-abuse config: environment variable …" in journalctl and exit
+; non-zero), so an operator typo never silently degrades protection.
+
+[Service]
+Environment=KATPOOL_ANTI_ABUSE_MAX_CONN_PER_IP=256
+Environment=KATPOOL_ANTI_ABUSE_MAX_TRACKED_IPS=65536
+Environment=KATPOOL_ANTI_ABUSE_FRAME_RATE_PER_SEC=100
+Environment=KATPOOL_ANTI_ABUSE_FRAME_BURST=200

@@ -1,0 +1,45 @@
+# Standalone non-workspace crate. The parent workspace at
+# `/Cargo.toml` already excludes this path via `workspace.exclude`;
+# the empty `[workspace]` table here finishes the job by making this
+# crate's own manifest authoritative for itself.
+[workspace]
+
+[package]
+name = "kaspa-stratum-bridge-fuzz"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.91.0"
+publish = false
+authors = ["Argon Mining <argonmining@example.invalid>"]
+license = "MIT OR Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.kaspa-stratum-bridge]
+path = ".."
+
+# Targets are listed explicitly (instead of relying on cargo-fuzz's
+# auto-discovery) so build failures surface as crate-level errors rather
+# than silent target omission. Each `[[bin]]` matches one file under
+# `fuzz_targets/`.
+[[bin]]
+name = "stratum_parser"
+path = "fuzz_targets/stratum_parser.rs"
+test = false
+doc = false
+bench = false
+
+[profile.release]
+debug = 1
+
+# Mirrored from the parent workspace's `/Cargo.toml`. cargo-fuzz's
+# crate is an independent workspace so it does not inherit the parent's
+# `[patch.crates-io]` table; we duplicate the entry here so the same
+# rusty-kaspa-pinned `serde_nested_with` source resolves both here and
+# in the parent build. See `bridge/UPSTREAM.md` for rationale.
+[patch.crates-io]
+serde_nested_with = { git = "https://github.com/murar8/serde_nested_with", tag = "0.2.6" }

@@ -1,0 +1,68 @@
+#!/usr/sbin/nft -f
+#
+# Origin firewall for the fly.io anycast stratum edge (C2 of the road-to-mainnet
+# plan; ADR-0022). This is the backbone of the PROXY-trust model: the stratum
+# ports must accept connections ONLY from the fly.io per-region egress IPs, so
+# nobody else can open an origin port and spoof a PROXY v2 header to forge a
+# miner IP. The bridge pairs this with KATPOOL_STRATUM_PROXY_PROTOCOL=true.
+#
+# The fly_egress_* element lists below are PLACEHOLDERS using the RFC 5737 /
+# RFC 3849 documentation ranges (192.0.2.0/24, 2001:db8::/32) — they match no
+# real host. Do NOT apply this file as-is; run:
+#
+#     sudo ops/edge/flyio/nftables/apply-origin-firewall.sh
+#
+# which fills the real egress IPs from `fly ips list` and applies the result.
+# Re-run after any `fly ips allocate-egress`. The sentinel comments around each
+# elements line are how that script finds and rewrites them — keep them intact.
+#
+# Scope: this ruleset touches ONLY the stratum ports. The input chain policy is
+# `accept`, so SSH, the API, kaspad, and everything else are unaffected; the
+# only enforcement is "stratum ports are fly-egress-only".
+
+# Idempotent (re)install: ensure the table exists, delete it, recreate it fresh.
+add table inet katpool
+delete table inet katpool
+
+table inet katpool {
+    set fly_egress_v4 {
+        type ipv4_addr
+        # >>> fly_egress_v4 (managed by apply-origin-firewall.sh) >>>
+        elements = { 192.0.2.11, 192.0.2.12, 192.0.2.13, 192.0.2.14, 192.0.2.15, 192.0.2.16, 192.0.2.17 }
+        # <<< fly_egress_v4 <<<
+    }
+
+    set fly_egress_v6 {
+        type ipv6_addr
+        # >>> fly_egress_v6 (managed by apply-origin-firewall.sh) >>>
+        elements = { 2001:db8::1 }
+        # <<< fly_egress_v6 <<<
+    }
+
+    set stratum_ports {
+        type inet_service
+        # The ORIGIN listening ports of the new pool. Under mainnet co-residency
+        # the legacy pool still owns 1111-8888 on this host, so the new pool binds
+        # the 21111-28888 alt band (KATPOOL_STRATUM_PORTS in ops/env/mainnet.env)
+        # and the fly edge presents the canonical public 1111-8888, forwarding
+        # 1111->21111 ... 8888->28888 (see ops/edge/flyio/haproxy.cfg). Locking the
+        # alt band leaves legacy's 1111-8888 fully open (chain policy is accept).
+        elements = { 21111, 22222, 23333, 24444, 25555, 26666, 27777, 28888 }
+    }
+
+    chain stratum_input {
+        type filter hook input priority filter; policy accept;
+
+        # Fast-path established/related so the rules below only judge NEW
+        # connections (and never sever an in-flight miner session on reload).
+        ct state established,related accept
+
+        # Allow the stratum ports only from the fly.io anycast edge egress IPs.
+        tcp dport @stratum_ports ip  saddr @fly_egress_v4 accept
+        tcp dport @stratum_ports ip6 saddr @fly_egress_v6 accept
+
+        # Everyone else hitting a stratum port is dropped (silently — a REJECT
+        # would leak that the port exists and aid scanning).
+        tcp dport @stratum_ports drop
+    }
+}

@@ -1,0 +1,211 @@
+name: release
+
+# Triggered by a semver-formatted tag (`v*`) or manually. Builds a
+# static musl binary, generates a CycloneDX SBOM via syft, and signs
+# the binary + SBOM with cosign keyless (OIDC) — no long-lived keys.
+#
+# All third-party actions pinned by full commit SHA per supply-chain
+# discipline.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "git ref to release (branch, tag, or SHA)"
+        required: true
+        default: main
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  build:
+    name: build static musl binary
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      binary-sha256: ${{ steps.hash.outputs.sha256 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Determine version
+        id: version
+        run: |
+          v=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust (with musl target)
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: "1.91"
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install musl tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          shared-key: katpool-release
+
+      - name: Build (release, musl, locked)
+        run: |
+          cargo build \
+            --release \
+            --locked \
+            --target x86_64-unknown-linux-musl \
+            --bin katpool
+
+      - name: Compute binary SHA-256
+        id: hash
+        run: |
+          path=target/x86_64-unknown-linux-musl/release/katpool
+          sum=$(sha256sum "$path" | cut -d' ' -f1)
+          echo "sha256=$sum" >> "$GITHUB_OUTPUT"
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: katpool-${{ steps.version.outputs.version }}-x86_64-unknown-linux-musl
+          path: target/x86_64-unknown-linux-musl/release/katpool
+          if-no-files-found: error
+          retention-days: 14
+
+  sbom:
+    name: generate SBOM (CycloneDX)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: katpool-${{ needs.build.outputs.version }}-x86_64-unknown-linux-musl
+          path: dist/
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: dist/katpool-${{ needs.build.outputs.version }}.cdx.json
+          upload-artifact: false
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: katpool-${{ needs.build.outputs.version }}-sbom
+          path: dist/katpool-${{ needs.build.outputs.version }}.cdx.json
+          if-no-files-found: error
+          retention-days: 14
+
+  sign:
+    name: sign artifacts (cosign keyless)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build, sbom]
+    permissions:
+      contents: read
+      id-token: write # OIDC for keyless signing via Sigstore
+    steps:
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: katpool-${{ needs.build.outputs.version }}-x86_64-unknown-linux-musl
+          path: dist/
+
+      - name: Download SBOM
+        uses: actions/download-artifact@v4
+        with:
+          name: katpool-${{ needs.build.outputs.version }}-sbom
+          path: dist/
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign binary
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cosign sign-blob \
+            --bundle dist/katpool.sigstore-bundle.json \
+            dist/katpool
+
+      - name: Sign SBOM
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cosign sign-blob \
+            --bundle dist/katpool.cdx.sigstore-bundle.json \
+            dist/katpool-${{ needs.build.outputs.version }}.cdx.json
+
+      - name: Upload signed bundle (binary)
+        uses: actions/upload-artifact@v4
+        with:
+          name: katpool-${{ needs.build.outputs.version }}-binary-signature
+          path: dist/katpool.sigstore-bundle.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload signed bundle (SBOM)
+        uses: actions/upload-artifact@v4
+        with:
+          name: katpool-${{ needs.build.outputs.version }}-sbom-signature
+          path: dist/katpool.cdx.sigstore-bundle.json
+          if-no-files-found: error
+          retention-days: 90
+
+  release:
+    name: publish GitHub release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build, sbom, sign]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file CHANGELOG.md \
+            --draft \
+            artifacts/katpool \
+            artifacts/katpool-${{ needs.build.outputs.version }}.cdx.json \
+            artifacts/katpool.sigstore-bundle.json \
+            artifacts/katpool.cdx.sigstore-bundle.json

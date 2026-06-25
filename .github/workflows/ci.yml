@@ -1,0 +1,255 @@
+name: ci
+
+# Runs on every push and PR. All third-party actions pinned by full
+# commit SHA (with a trailing comment naming the human-readable tag)
+# per supply-chain discipline.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Default to read-only. Each job opts into additional permissions
+# explicitly via its own `permissions:` block.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: "-D warnings"
+  RUST_BACKTRACE: short
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: "1.91"
+          components: rustfmt
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            protobuf-compiler clang libclang-dev libstdc++-12-dev
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: "1.91"
+          components: clippy
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          shared-key: katpool
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            protobuf-compiler clang libclang-dev libstdc++-12-dev
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: "1.91"
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          shared-key: katpool
+      - name: cargo test --workspace
+        run: cargo test --workspace --locked --no-fail-fast
+
+  deny:
+    name: deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@a531616d8ce3b9177443e48a1159bc945a099823 # v2.0.19
+        with:
+          log-level: warn
+          command: check
+          arguments: --all-features
+
+  # cargo-audit is intentionally not a separate job: cargo-deny check
+  # (above) already runs the advisories check against the same RustSec
+  # database with our deny.toml ignore list. Running both is redundant
+  # and the rustsec/audit-check action installs cargo-audit's latest
+  # which races ahead of our pinned MSRV. Single source of truth = deny.
+
+  doc:
+    name: doc
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            protobuf-compiler clang libclang-dev libstdc++-12-dev
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: "1.91"
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          shared-key: katpool
+          save-if: false
+      - name: cargo doc
+        run: cargo doc --workspace --no-deps --locked
+
+  # Catches typos in code, comments, and docs. Configuration in
+  # `_typos.toml` at the repo root tunes the crate-ci/typos
+  # defaults for our domain vocabulary (kaspa-specific terms,
+  # KRC-20/KRC-721, etc.).
+  typos:
+    name: typos
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: typos
+        uses: crate-ci/typos@7b04f660f4ee4f048d18fd341887cf28dfbedfe2 # v1.46.3
+
+  # Catches unused dependencies — orphaned `[dependencies]` entries
+  # that no `use` references anywhere in the crate. Tightens the
+  # supply-chain attack surface (every dep is one fewer crate to
+  # audit) and keeps `Cargo.toml` honest about what the code
+  # actually needs.
+  machete:
+    name: machete
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: "1.91"
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          shared-key: katpool-machete
+      - name: Install cargo-machete
+        run: cargo install --locked cargo-machete --version '^0.9'
+      - name: cargo machete
+        run: cargo machete --skip-target-dir
+
+  coverage:
+    name: coverage
+    # Informational only; skip on PRs to cut ~20 min wall-clock per push.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Coverage is informational only (ADR-0013 § Layer 7). The
+    # number is uploaded as an artefact for inspection but the
+    # job's pass/fail does NOT gate PRs — gating on a number would
+    # distort incentives. `continue-on-error` makes the workflow
+    # report SUCCESS even on tarpaulin failure (e.g. transient
+    # runner disk exhaustion); the artefact still uploads when
+    # the run succeeds and is simply absent when it fails.
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Free disk space
+        # Tarpaulin instruments every compilation unit, so the
+        # `target/` tree balloons to 12-15 GB on top of the
+        # workspace + transitive kaspad deps. The `ubuntu-latest`
+        # runner provides ~14 GB free out of the box; we reclaim
+        # ~30 GB by uninstalling pre-cached toolchains we don't
+        # use (Haskell, Android, .NET, etc.).
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            protobuf-compiler clang libclang-dev libstdc++-12-dev
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: "1.91"
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          shared-key: katpool-coverage
+      - name: Install cargo-tarpaulin
+        run: cargo install --locked cargo-tarpaulin --version '^0.31'
+      - name: Generate coverage
+        run: |
+          cargo tarpaulin \
+            --workspace \
+            --locked \
+            --out Xml \
+            --output-dir target/coverage \
+            --skip-clean \
+            --timeout 180
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: target/coverage/cobertura.xml
+          if-no-files-found: warn
+          retention-days: 14

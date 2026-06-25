@@ -1,0 +1,62 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+.DS_Store
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Per-network deploy env: only the *.env.example templates are tracked.
+# The real, host-local env files (DB creds, endpoints) are never committed;
+# the treasury key is always provisioned out of band, never in these files.
+ops/env/mainnet.env
+ops/env/tn10.env
+
+# Secrets - never commit any decrypted form
+*.age
+*.key
+*.pem
+!*.pub.pem
+secrets.decrypted.*
+
+# Coverage
+/coverage/
+*.profraw
+tarpaulin-report.html
+cobertura.xml
+lcov.info
+
+# Test artifacts
+**/__snapshots__/
+*.snap.new
+/tests/fuzz/corpus/
+/tests/fuzz/artifacts/
+/pipeline-evidence/
+/payout-evidence/
+/api-evidence/
+
+# SBOM / security artifacts (built on demand in CI)
+/sbom/
+*.cdx.json
+*.spdx.json
+*.sig
+*.cert
+
+# OS / tooling
+node_modules/
+.cache/
+.direnv/
+
+# Design audit
+.design-audit/
+cutover-evidence/

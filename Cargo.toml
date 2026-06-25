@@ -1,0 +1,181 @@
+[workspace]
+resolver = "2"
+members = [
+    # Shared libraries
+    "crates/katpool-domain",
+    "crates/katpool-config",
+    "crates/katpool-db",
+    "crates/katpool-metrics",
+    "crates/katpool-storagemass",
+    "crates/katpool-idempotency",
+    "crates/katpool-telemetry",
+    "crates/katpool-secrets",
+    "crates/katpool-fault-injection",
+    # Service crates
+    "accountant",
+    "payout-kas",
+    "payout-krc20",
+    "api",
+    "katpool",
+    # Forked stratum bridge (one-time source vendor from rusty-kaspa v1.1.0;
+    # kaspa-* deps now tracked at tn10-toc3, see bridge/UPSTREAM.md and ADR-0002).
+    "bridge",
+]
+# The cargo-fuzz harness under bridge/fuzz/ is intentionally a
+# separate, non-workspace crate. cargo-fuzz requires its own
+# `[package.metadata]` and pulls libfuzzer-sys, which is nightly-only
+# and would force the whole workspace onto nightly otherwise.
+exclude = ["bridge/fuzz"]
+
+# Workspace-wide package metadata; individual crates inherit via `package.{...}.workspace = true`.
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.91.0"
+license = "MIT OR Apache-2.0"
+authors = ["Nacho the Kat <socials@onargon.com>"]
+repository = "https://github.com/Nacho-the-Kat/katpool"
+homepage = "https://kas.katpool.com"
+publish = false
+
+# Workspace-wide dependency versions. Individual crates reference via `serde = { workspace = true }`.
+# Versions are bumped only via PR with a passing `cargo deny check` run.
+[workspace.dependencies]
+# rusty-kaspa v2.0.1 (commit cfafeb4) — git-sourced because none of these
+# crates are published to crates.io as of 2026-05-25. The bridge/ crate
+# uses them; see bridge/UPSTREAM.md for the vendoring rationale.
+# deny.toml [sources] allow-git permits this single repo.
+kaspa-alloc          = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspa-consensus-core = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspa-hashes         = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspa-math           = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspa-pow            = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspa-addresses      = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspa-txscript       = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspa-rpc-core       = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspa-rpc-service    = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspa-grpc-client    = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspa-notify         = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspa-core           = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspa-utils          = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+kaspad               = { git = "https://github.com/kaspanet/rusty-kaspa", tag = "v2.0.1" }
+
+# Additional bridge support crates (crates.io)
+dirs = "5"
+num-traits = "0.2"
+# Exact base-10 fixed-point for the KAS→NACHO floor-price derivation (ADR-0016):
+# CoinGecko quotes NACHO and KAS in USD; KAS-per-NACHO = nacho_usd / kaspa_usd is
+# computed exactly (no f64, ADR-0013) and floored to a fixed scale.
+bigdecimal = "0.4"
+once_cell = "1"
+futures-util = "0.3"
+parking_lot = "0.12"
+regex = "1"
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
+clap = { version = "4", features = ["derive"] }
+# IP→country geolocation (GeoLite2 .mmdb reader; ADR-0025). ISC-licensed.
+maxminddb = "0.28"
+
+# Async runtime + utilities
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+futures = "0.3"
+async-trait = "0.1"
+# Serialization
+serde = { version = "1", features = ["derive"] }
+# `raw_value` captures the verbatim JSON number text so a price quote is parsed
+# exactly (CoinGecko returns 18-sig-fig floats); a plain `serde_json::Number`
+# round-trips through f64 unless `arbitrary_precision` is on (ADR-0013).
+serde_json = { version = "1", features = ["raw_value"] }
+toml = "0.8"
+# Errors
+thiserror = "2"
+anyhow = "1"
+# Logging + tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry = "0.31"
+opentelemetry = "0.30"
+opentelemetry_sdk = { version = "0.30", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.30", features = ["grpc-tonic"] }
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "macros", "migrate", "bigdecimal", "chrono", "uuid"] }
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+# Crypto / encoding
+hex = "0.4"
+blake2 = "0.10"
+# HTTP client + server
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip"] }
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "limit", "timeout"] }
+# Per-IP HTTP rate limiting (GCRA token bucket). 0.8 tracks axum 0.8 / tower 0.5
+# / http 1 / thiserror 2 — the exact stack this workspace pins (ADR-0021).
+tower_governor = { version = "0.8", features = ["axum"] }
+# Bounded in-memory TTL cache for the read-only API's hot aggregates (ADR-0021).
+moka = { version = "0.12", features = ["future"] }
+# Metrics
+prometheus = "0.14"
+# Configuration
+config = { version = "0.15", default-features = false, features = ["toml", "yaml"] }
+validator = { version = "0.20", features = ["derive"] }
+# Secrets
+secrecy = { version = "0.10", features = ["serde"] }
+zeroize = { version = "1", features = ["derive"] }
+# Random + crypto primitives
+rand = "0.9"
+# secp256k1 — pinned to the exact version rusty-kaspa tn10-toc3 uses so the
+# `Keypair`/`SecretKey` types unify with `kaspa_consensus_core::sign`.
+secp256k1 = "0.29"
+# Low-level OS (mlock/munlock for treasury custody)
+libc = "0.2"
+# Testing
+proptest = "1"
+tempfile = "3"
+testcontainers = "0.24"
+testcontainers-modules = { version = "0.12", features = ["postgres"] }
+mockito = "1"
+wiremock = "0.6"
+insta = { version = "1", features = ["yaml", "json"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+opt-level = 3
+overflow-checks = true
+
+[profile.dist]
+inherits = "release"
+debug = false
+
+# Lints applied workspace-wide. Crates can tighten but not loosen.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_extern_crates = "warn"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+# Pedantic baseline with selected denies. Adjust only via PR + ADR if necessary.
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+# Explicit denies for footguns
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+integer_division = "deny"
+float_arithmetic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+# Soften a few pedantic lints that fire on idiomatic code
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"

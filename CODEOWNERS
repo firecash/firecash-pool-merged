@@ -1,0 +1,56 @@
+# CODEOWNERS — required reviewers for the katpool monorepo.
+#
+# Syntax reference:
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+#
+# Enforced by branch protection on `main` (see .github/branch-protection.md).
+#
+# Approving a PR that touches a path below requires an approval from at
+# least one of the listed owners. Adding additional reviewers is
+# strongly recommended for any path involving treasury custody, payouts,
+# database migrations, or CI/CD supply chain.
+
+# Catch-all: every path has at least one required reviewer.
+*                                                  @argonmining
+
+# --------------------------------------------------------------------------
+# Treasury and signing — anything that touches the private key or constructs
+# outbound transactions. PRs to these paths should not auto-merge and
+# should include a checklist confirming key-handling discipline.
+# --------------------------------------------------------------------------
+/crates/katpool-secrets/                           @argonmining
+/payout-kas/                                       @argonmining
+/payout-krc20/                                     @argonmining
+/ops/secrets/                                      @argonmining
+/ops/systemd/                                      @argonmining
+/ops/firewall/                                     @argonmining
+
+# --------------------------------------------------------------------------
+# Database schema and data-migration scripts — irreversible production
+# impact if wrong.
+# --------------------------------------------------------------------------
+/migration/                                        @argonmining
+/crates/katpool-db/migrations/                     @argonmining
+
+# --------------------------------------------------------------------------
+# Bridge — vendored fork of rusty-kaspa with intrusive patches. Keep the
+# upstream-divergence surface tight.
+# --------------------------------------------------------------------------
+/bridge/                                           @argonmining
+
+# --------------------------------------------------------------------------
+# CI / supply chain. Any change here can affect every artifact we ship.
+# --------------------------------------------------------------------------
+/.github/workflows/                                @argonmining
+/deny.toml                                         @argonmining
+/rust-toolchain.toml                               @argonmining
+/Cargo.lock                                        @argonmining
+
+# --------------------------------------------------------------------------
+# Architectural decisions and runbooks — require operator review.
+# --------------------------------------------------------------------------
+/docs/decisions/                                   @argonmining
+/docs/runbooks/                                    @argonmining
+/docs/cutover-plan.md                              @argonmining
+/docs/threat-model.md                              @argonmining
+/docs/custody.md                                   @argonmining

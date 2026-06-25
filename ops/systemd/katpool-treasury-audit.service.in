@@ -1,0 +1,51 @@
+; katpool-treasury-audit.service.in — periodic treasury key-rotation audit
+; (Phase 8 / Runbook 11). Rendered per network by scripts/deploy.sh
+; (__NETWORK__ / __DEPLOY_DIR__) and driven by the matching .timer.
+;
+; Read-only and offline: `katpool treasury audit` loads the treasury key,
+; derives its schnorr P2PK address, and compares it to KATPOOL_POOL_ADDRESS. It
+; moves no funds and makes no network calls. A mismatch logs a structured ERROR
+; (result=mismatch) and exits non-zero, so the unit enters `failed` and the line
+; ships to Loki — wire a Loki alert / OnFailure notify on it (see Runbook 11).
+[Unit]
+Description=Katpool treasury key-rotation audit (__NETWORK__)
+Documentation=file:///root/katpool/docs/runbooks/11-key-rotation.md
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=/etc/katpool/__NETWORK__.env
+WorkingDirectory=__DEPLOY_DIR__
+ExecStart=__DEPLOY_DIR__/katpool treasury audit
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=katpool-treasury-audit-__NETWORK__
+
+; ----- Hardening (read-only; reads the env + treasury key under /etc/katpool) -
+ProtectSystem=strict
+ReadOnlyPaths=/etc/katpool
+PrivateTmp=yes
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @raw-io @reboot @swap @cpu-emulation
+SystemCallErrorNumber=EPERM
+UMask=0077
+KeyringMode=private

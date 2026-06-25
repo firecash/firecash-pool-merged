@@ -1,0 +1,144 @@
+[package]
+# Forked one-time from kaspanet/rusty-kaspa v1.1.0 — see UPSTREAM.md.
+# Crate name kept identical to upstream so the binary that downstream
+# tooling (miners, dashboards) expects continues to resolve.
+name = "kaspa-stratum-bridge"
+description = "Kaspa Stratum Bridge - Mining connectivity for Kaspa Stratum miners (katpool fork)"
+rust-version.workspace = true
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+# Upstream had `include.workspace = true`; our workspace.package has no
+# `include` field because `publish = false` makes it irrelevant.
+
+# cargo-machete ignores. The bridge is vendored from
+# kaspanet/rusty-kaspa v1.1.0; upstream's Cargo.toml lists deps
+# their broader workspace links transitively. We preserve the
+# list verbatim (per UPSTREAM.md's "keep divergence minimal"
+# rule) and accept that some entries aren't referenced from our
+# subset of the upstream binaries. Pruning these is an upstream
+# concern, not ours.
+[package.metadata.cargo-machete]
+ignored = ["blake2", "faster-hex", "kaspa-rpc-service", "kaspad", "uuid"]
+
+[dependencies]
+# katpool fork: shared domain types for the event-bus broadcast.
+# This is intentionally the only katpool-* dep on the vendored bridge —
+# the bridge owns protocol/PoW; the accountant owns accounting; events
+# are the contract between them. See bridge/UPSTREAM.md.
+katpool-domain = { path = "../crates/katpool-domain" }
+
+# Kaspa dependencies - using workspace versions
+kaspa-consensus-core = { workspace = true }
+kaspa-hashes = { workspace = true }
+kaspa-math = { workspace = true }
+kaspa-pow = { workspace = true }
+kaspa-addresses = { workspace = true }
+kaspa-rpc-core = { workspace = true }
+kaspa-rpc-service = { workspace = true }
+kaspa-grpc-client = { workspace = true }
+kaspa-notify = { workspace = true }
+kaspa-core = { workspace = true }
+kaspa-utils = { workspace = true }
+kaspa-alloc = { workspace = true }
+kaspad = { workspace = true }
+dirs = { workspace = true }
+
+# External dependencies - using workspace versions where available
+tokio = { workspace = true, features = ["full"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+num-traits = { workspace = true }
+async-trait = { workspace = true }
+once_cell = { workspace = true }
+futures-util = { workspace = true }
+parking_lot = { workspace = true }
+regex = { workspace = true }
+uuid = { workspace = true }
+
+# CLI
+clap = { workspace = true, features = ["derive"] }
+
+# External dependencies not in workspace (add specific versions)
+anyhow = "1.0"
+# TCP keepalive tuning on accepted miner sockets. tokio's TcpStream exposes no
+# keepalive interval/retry knobs, so we set them via socket2 to reap half-open
+# connections (abruptly power-cycled ASICs that never send FIN/RST). Version
+# matches the one already resolved in the workspace lockfile.
+socket2 = "0.6"
+# PROXY protocol v2 parser for the fly.io anycast edge (ADR-0022). Used
+# by the stratum listener to recover the real miner IP behind the
+# forwarder. Mature, widely-used parser (v1 + v2).
+ppp = "2.3"
+tracing = "0.1"
+tracing-log = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+blake2 = "0.10"
+num-bigint = "0.4"
+# Use the workspace prometheus (0.14, matching upstream v2.0.0) so the bridge,
+# accountant, and katpool-metrics all share ONE prometheus version — hence one
+# global default registry. (The pre-revendor bridge pinned 0.13 while the rest
+# of the workspace was on 0.14, which split the registry so payout/treasury
+# metrics never reached the bridge `/metrics` endpoint.)
+prometheus = { workspace = true }
+# Upstream v2.0.0 config parsing (app_config.rs) uses serde_yaml (replaced the
+# old yaml-rust).
+serde_yaml = "0.9"
+faster-hex = "0.1"
+# Embedded dashboard static assets (prom.rs) for portable binaries.
+include_dir = "0.7"
+chrono = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_System_Console"] }
+
+# musl (dist) builds: declare mimalloc without 'override' so it overrides
+# kaspa-alloc's version; the .cargo linker flag handles remaining conflicts
+# (matches upstream v2.0.0).
+[target.'cfg(all(not(target_os = "macos"), target_env = "musl"))'.dependencies]
+mimalloc = { version = "0.1.48", default-features = false }
+
+[dev-dependencies]
+tokio-test = "0.4"
+rand = { workspace = true }
+
+[features]
+# Optional in-process CPU miner (upstream v2.0.0). Off by default; the pool
+# never builds it for production.
+rkstratum_cpu_miner = []
+
+[[bin]]
+name = "stratum-bridge"
+path = "src/main.rs"
+
+# Lint policy intentionally diverges from the workspace defaults.
+#
+# Our workspace runs a strict clippy profile (pedantic + nursery + many
+# explicit denies + `-D warnings` in CI) that's appropriate for code we
+# author. The vendored bridge code was written to the upstream
+# rusty-kaspa lint policy, which is deliberately minimal — see
+# `Cargo.toml [workspace.lints]` in rusty-kaspa v1.1.0. Forcing our
+# strict set onto upstream code produces ~963 warnings/errors that we
+# don't actually want to fix (they'd be 963 lines of intrusive
+# divergence from upstream).
+#
+# This crate therefore opts out of the workspace lints and applies the
+# same minimal set rusty-kaspa uses. Our own intrusive patches in
+# UPSTREAM.md are still reviewable as normal PRs — the lint relaxation
+# applies to the upstream code, not to our hooks.
+[lints.rust]
+warnings = "allow"
+
+[lints.clippy]
+empty_docs = "allow"
+uninlined_format_args = "allow"
+
+[lints.rustdoc]
+# Same reasoning as [lints.rust].warnings above: don't enforce our
+# rustdoc strictness on vendored upstream code.
+all = "allow"

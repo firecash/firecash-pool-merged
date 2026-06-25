@@ -1,0 +1,134 @@
+; katpool-kaspad-mainnet.service — hardened rusty-kaspa (mainnet, Toccata-aware).
+;
+; The NEW pool's own dedicated mainnet node, run alongside (never touching) the
+; legacy dockerized supertypo/rusty-kaspad:v1.0.1 mainnet node. Mirrors the
+; hardening profile of katpool-kaspad-tn10.service.
+;
+; Why a separate node (ADR-0010 + the mainnet cutover plan): the new pool runs
+; rusty-kaspa v2.0.0 crates and MUST talk to a v2.0.0 node (a version-mismatched
+; node yields RuleError::BadMerkleRoot on block submission). The legacy v1.0.1
+; WASM wRPC-borsh client cannot parse a v2.0.0 node's RPC responses
+; (RpcUtxoEntry/RpcTransactionOutput bumped serialized version 1->2 + covenant
+; fields), so the legacy node CANNOT be shared/upgraded without breaking legacy.
+; Hence the new pool gets its own v2.0.0 node here.
+;
+; TEMPORARY non-default ports: the legacy node holds the defaults
+; (16110/16111/17110/18110), so this node uses +10 on each (16120/16121/17120/
+; 18120) during co-residency. After the legacy node is decommissioned at cutover,
+; rebind this unit to the default ports (a plain restart; the datadir is
+; unaffected by listen-port flags) and update the pool's KASPAD_GRPC_URL.
+;
+; Installation:
+;   sudo /root/katpool/ops/kaspad/install-kaspad-mainnet.sh
+;   sudo systemctl enable --now katpool-kaspad-mainnet
+;
+; Operator overrides go in
+;   /etc/systemd/system/katpool-kaspad-mainnet.service.d/*.conf
+
+[Unit]
+Description=Katpool — rusty-kaspa mainnet node (v2.0.0, dedicated to the new pool)
+Documentation=https://github.com/Nacho-the-Kat/katpool
+Documentation=https://github.com/kaspanet/rusty-kaspa
+Requires=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+
+User=kaspad-mainnet
+Group=kaspad-mainnet
+
+; ----- Resource limits -----------------------------------------------
+LimitNOFILE=65536
+LimitNPROC=4096
+TasksMax=4096
+
+; ----- Co-residency courtesy -----------------------------------------
+; This is the THIRD kaspad on the box (legacy mainnet + tn10 + this). The
+; legacy + tn10 nodes are production; deprioritise this node's CPU and disk IO
+; (defaults are 100) so a heavy initial-block-download never adds IO latency to
+; the others. At steady state all three are light; this just protects IBD.
+CPUWeight=50
+IOWeight=50
+
+; ----- Restart policy ------------------------------------------------
+Restart=always
+RestartSec=5s
+
+; ----- Binary + arguments --------------------------------------------
+; Mainnet (no --testnet). TEMPORARY non-default ports (+10 vs the legacy node's
+; defaults) for co-residency — see the header note on reverting post-cutover.
+; - --utxoindex: required for the pool's balance/UTXO lookups (treasury + API)
+; - --rpclisten:       gRPC      0.0.0.0:16120  (the pool's KASPAD_GRPC_URL)
+; - --rpclisten-borsh: wRPC      0.0.0.0:17120
+; - --rpclisten-json:  wRPC-json 0.0.0.0:18120
+; - --listen:          P2P       0.0.0.0:16121
+ExecStart=/usr/local/bin/kaspad-mainnet \
+    --yes \
+    --utxoindex \
+    --disable-upnp \
+    --nologfiles \
+    --appdir=/var/lib/kaspad-mainnet/data \
+    --listen=0.0.0.0:16121 \
+    --rpclisten=0.0.0.0:16120 \
+    --rpclisten-borsh=0.0.0.0:17120 \
+    --rpclisten-json=0.0.0.0:18120
+
+WorkingDirectory=/var/lib/kaspad-mainnet
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=katpool-kaspad-mainnet
+TimeoutStartSec=120s
+TimeoutStopSec=120s
+
+; ----- Filesystem hardening ------------------------------------------
+StateDirectory=kaspad-mainnet
+StateDirectoryMode=0750
+ReadWritePaths=/var/lib/kaspad-mainnet
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateMounts=yes
+ProtectProc=invisible
+ProcSubset=pid
+
+; ----- Kernel hardening ----------------------------------------------
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+
+; ----- Capabilities --------------------------------------------------
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+
+; ----- Memory / execution --------------------------------------------
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+
+; ----- Network surface -----------------------------------------------
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+; ----- Syscall filter ------------------------------------------------
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @raw-io @reboot @swap @cpu-emulation
+SystemCallErrorNumber=EPERM
+
+; ----- Misc ----------------------------------------------------------
+UMask=0077
+KeyringMode=private
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

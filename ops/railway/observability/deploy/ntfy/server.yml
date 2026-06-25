@@ -1,0 +1,15 @@
+# ntfy server (B5) — non-secret defaults. The public base URL is supplied per
+# environment via the NTFY_BASE_URL env var (ntfy env vars override this file),
+# since it differs between testnet and mainnet custom domains. Cache/auth live on
+# the Railway volume at /var/cache/ntfy.
+#
+# Topics are locked down (deny-all): the bridge publishes with an access token
+# and subscribers must authenticate. Create the token after first deploy with
+# `ntfy user add` / `ntfy access` / `ntfy token add` (stored on the volume).
+listen-http: ":80"
+behind-proxy: true
+cache-file: "/var/cache/ntfy/cache.db"
+cache-duration: "12h"
+auth-file: "/var/cache/ntfy/auth.db"
+auth-default-access: "deny-all"
+attachment-cache-dir: "/var/cache/ntfy/attachments"

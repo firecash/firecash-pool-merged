@@ -1,0 +1,24 @@
+; Drop-in override example: per-deployment network ACLs.
+;
+; The base unit ships with `IPAddressAllow=localhost` and
+; `IPAddressDeny=any`. The bridge needs *outbound* access to the kaspad
+; node it talks to; provide that node's IP (or subnet) here.
+;
+; Copy to /etc/systemd/system/katpool-bridge.service.d/network.conf
+; (drop the `.example` suffix), edit the values, then run:
+;
+;   sudo systemctl daemon-reload
+;   sudo systemctl restart katpool-bridge
+;
+; To check what's effectively allowed:
+;
+;   systemctl show katpool-bridge | grep IPAddress
+
+[Service]
+; Example: allow outbound to a kaspad on the same host network only.
+IPAddressAllow=10.0.0.0/8
+IPAddressAllow=192.168.0.0/16
+IPAddressAllow=172.16.0.0/12
+; Inbound stratum connections come from anywhere on the public internet;
+; remove this line if your deployment is private-only.
+IPAddressAllow=any

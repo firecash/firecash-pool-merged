@@ -1,0 +1,188 @@
+# cargo-deny configuration.
+# Run locally:  cargo deny check
+# Run in CI:    `.github/workflows/ci.yml`  job: deny
+#
+# Schema reference: https://embarkstudios.github.io/cargo-deny/checks/cfg.html
+# Validated against cargo-deny 0.18.x (the version pinned in CI).
+
+[graph]
+# Tier-1 Linux targets only. Restricting this cuts noise from platform-specific
+# transitive deps that are not relevant for our actual build matrix.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+]
+all-features = true
+
+# ---------------------------------------------------------------------------
+# Advisories: block on RustSec issues.
+# ---------------------------------------------------------------------------
+[advisories]
+yanked = "deny"
+unmaintained = "workspace"
+# `unsound` was removed in cargo-deny 0.18 (EmbarkStudios PR #611) — the
+# category is folded into general advisory handling.
+ignore = [
+    # RUSTSEC-2025-0111: tokio-tar incorrectly parses PAX extended headers.
+    # Pulled in via testcontainers > bollard > tokio-tar 0.3.1, which is a
+    # dev-only dep used to spawn ephemeral databases in integration tests.
+    # No production impact (testcontainers is never linked into release
+    # builds).
+    { id = "RUSTSEC-2025-0111", reason = "tokio-tar in testcontainers dev-dep only; no production impact" },
+
+    # ===== Advisories triggered by the rusty-kaspa tn10-toc3 subgraph =====
+    #
+    # rusty-kaspa tn10-toc3 (commit 1015a62) pins the transitive dep tree in
+    # its Cargo.lock at release time. A couple of those deps carry RustSec
+    # advisories that have no fixed upstream release yet; we track each one
+    # explicitly rather than blanket-allowing the whole subgraph.
+    #
+    # Re-evaluate whenever we bump the pinned rusty-kaspa tag (see
+    # scripts/set-kaspa-version.sh and bridge/UPSTREAM.md); advisories that no
+    # longer match a crate in the tree surface as `advisory-not-detected`
+    # warnings and must be pruned.
+    { id = "RUSTSEC-2021-0145", reason = "atty: unsoundness on Windows; we target Linux only — `graph.targets` in this file restricts to x86_64-unknown-linux-{gnu,musl}" },
+    { id = "RUSTSEC-2024-0320", reason = "yaml-rust unmaintained; bridge uses it for config.yaml parsing only" },
+    { id = "RUSTSEC-2024-0437", reason = "protobuf uncontrolled recursion CVE; relevant proto definitions are statically generated and bounded" },
+]
+
+# ---------------------------------------------------------------------------
+# Licenses: strict allowlist. Anything outside is rejected.
+# Every entry below is justified by an actually-encountered dep at some point;
+# unused entries warn (visible in cargo deny output) and are cleaned up.
+# ---------------------------------------------------------------------------
+[licenses]
+confidence-threshold = 0.93
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "Zlib",
+    # CDLA-Permissive-2.0 used by `webpki-roots`, the root cert bundle pulled in
+    # by hyper-rustls. It's a permissive license maintained by the Linux Foundation.
+    # See https://cdla.dev/permissive-2-0/
+    "CDLA-Permissive-2.0",
+    # ===== Licenses introduced by the rusty-kaspa v1.1.0 subgraph =====
+    # MPL-2.0: weak copyleft, file-level; permits proprietary linkage. Used
+    # by webpki etc.
+    "MPL-2.0",
+    # CC0-1.0: public domain dedication; permissive.
+    "CC0-1.0",
+    # ===== Licenses introduced by the rusty-kaspa tn10-toc3 subgraph =====
+    # 0BSD (BSD Zero Clause): public-domain-equivalent, no attribution
+    # required. Used by `mock_instant`, a deterministic `Instant` mock pulled
+    # transitively through the kaspad/rusty-kaspa tree.
+    "0BSD",
+]
+exceptions = [
+    # malachite-nz and the wider malachite-* family are LGPL-3.0-only,
+    # pulled in by kaspa-math (a rusty-kaspa internal crate). LGPL-3.0
+    # dynamic-linking compliance for static binaries requires offering
+    # relinkable object files OR not distributing the binary. The
+    # katpool binary is operator-run, not redistributed to third
+    # parties; even if we did distribute, LGPL-3.0-only is compatible
+    # with our dual-licensed source as long as we honour the relinking
+    # obligation. Kaspa core ships kaspad binaries under the same
+    # posture.
+    { allow = ["LGPL-3.0-only"], crate = "malachite-nz" },
+    { allow = ["LGPL-3.0-only"], crate = "malachite-base" },
+    # ring's license file is a non-standard composite (BSD + ISC + OpenSSL).
+    # Detected by cargo-deny at low confidence as "OpenSSL". The crate is a
+    # widely-audited TLS dependency; we accept its custom licence.
+    { allow = ["OpenSSL", "ISC", "MIT"], crate = "ring" },
+    # workflow-perf-monitor (tn10-toc3 pins v0.0.3 from git) has a MIT license
+    # file that cargo-deny detects at confidence 0.87 (below our 0.93
+    # threshold). Asserting MIT via explicit exception rather than lowering the
+    # global threshold.
+    { allow = ["MIT"], crate = "workflow-perf-monitor" },
+]
+
+# `clarify` resolves ambiguous license detection on crates whose LICENSE
+# files don't match a single SPDX identifier at >= our confidence
+# threshold. Hashes recorded here pin the exact LICENSE file we
+# audited; if the upstream license file changes, the hash mismatches
+# and the clarify stops applying — that's the intended safety mechanism.
+# Placed AFTER `exceptions = [ ... ]` because TOML's array-of-tables
+# syntax (`[[licenses.clarify]]`) continues consuming keys until another
+# section header.
+[[licenses.clarify]]
+name = "ring"
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [
+    { path = "LICENSE", hash = 0xbd0eed23 },
+]
+
+[[licenses.clarify]]
+name = "workflow-perf-monitor"
+expression = "MIT"
+license-files = [
+    { path = "LICENSE", hash = 0xf6bedc5c },
+]
+
+# ---------------------------------------------------------------------------
+# Bans: forbid known-bad crates; allow controlled duplicates with rationale.
+# ---------------------------------------------------------------------------
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+# Internal path-dependencies in our private workspace crates legitimately use
+# `path = "..."` without a version. This option silences the wildcard error
+# for path/git dev-dependencies and path/git dependencies in private
+# (publish = false) crates while keeping the lint active for public deps.
+# Documented in EmbarkStudios/cargo-deny PR #487.
+allow-wildcard-paths = true
+highlight = "simplest-path"
+workspace-default-features = "warn"
+external-default-features = "warn"
+
+# Forbidden crates (with rationale + redirect).
+deny = [
+    { crate = "openssl", reason = "Use rustls — fewer CVEs, no system OpenSSL", use-instead = "rustls" },
+    { crate = "openssl-sys", reason = "See openssl above", use-instead = "rustls" },
+    { crate = "native-tls", reason = "Pulls system TLS; we standardise on rustls", use-instead = "rustls" },
+    { crate = "git2", reason = "Pulls libssh2/libgit2; supply-chain risk for build hosts", use-instead = "gix" },
+    { crate = "actix-web", reason = "We standardise on axum + tower", use-instead = "axum" },
+]
+
+# Explicit duplicate-version exceptions. Each entry must have a reason and is
+# revisited any time we bump the relevant transitive dep.
+skip = []
+
+# `skip-tree` skips the whole transitive subtree under a crate. We use this
+# only for subsystems that vendor multiple versions of common utility crates
+# (rand/hashbrown/foldhash/etc) at their seams; this is preferable to a long
+# explicit `skip` list because it auto-tracks upstream's own version pinning.
+skip-tree = [
+    { crate = "sqlx", reason = "sqlx 0.8 ecosystem pins hashbrown/foldhash/hashlink at versions that differ from newer subsystems" },
+    { crate = "opentelemetry_sdk", reason = "opentelemetry stack still on thiserror 1.x while our app uses thiserror 2.x" },
+    { crate = "opentelemetry-otlp", reason = "see opentelemetry_sdk above" },
+    { crate = "tracing-opentelemetry", reason = "see opentelemetry_sdk above" },
+    { crate = "rand", reason = "rand 0.8/0.9 split during transition; safe utility lib" },
+    { crate = "config", reason = "config crate pulls older toml versions" },
+    { crate = "kaspa-stratum-bridge", reason = "Forked from rusty-kaspa v1.1.0; the rusty-kaspa workspace pins many transitive crate versions that may differ from our app workspace. The bridge subtree is intentionally allowed to deviate." },
+    { crate = "kaspad", reason = "Embedded kaspad transitively pulls the rusty-kaspa workspace's pinned versions." },
+]
+
+# ---------------------------------------------------------------------------
+# Sources: only crates.io. Git sources require explicit ADR + allowlist.
+# ---------------------------------------------------------------------------
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+# rusty-kaspa is the canonical Rust implementation of the Kaspa full node.
+# The 11 kaspa-* crates the bridge depends on are NOT published to crates.io
+# (as of 2026-05-25); the rusty-kaspa monorepo tag is the kaspa core team's
+# release mechanism. See ADR-0002 and bridge/UPSTREAM.md for the rationale.
+# Pinned to a specific tag in workspace.dependencies so the source is
+# reproducible.
+allow-git = [
+    "https://github.com/kaspanet/rusty-kaspa",
+    # workflow-perf-monitor is published on crates.io up to v0.0.2, but
+    # rusty-kaspa tn10-toc3 pins v0.0.3 which exists only as a git tag on
+    # the kaspanet fork. Pinned to tag v0.0.3 in the rusty-kaspa lockfile.
+    "https://github.com/kaspanet/workflow-perf-monitor-rs",
+]
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

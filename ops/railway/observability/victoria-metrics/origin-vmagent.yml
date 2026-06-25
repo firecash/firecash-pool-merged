@@ -1,0 +1,44 @@
+# vmagent scrape config — NETCUP ORIGIN side (runs next to the pool).
+#
+# The pool's Prometheus exporter binds loopback on mainnet
+# (KATPOOL_PROM_PORT=127.0.0.1:9302, ops/env/mainnet.env.example) and is
+# instance-filtered (bridge/src/prom.rs::filter_metric_families_for_instance),
+# so it can only be read from the origin host. A small vmagent runs here,
+# scrapes localhost, and remote_writes to VictoriaMetrics on Railway. This is
+# the inbound half of B4 and preserves the ADR-0004 failure-domain split: the
+# pool host produces metrics, the (separate) Railway stack stores/alerts on them.
+#
+# Run:
+#   vmagent \
+#     -promscrape.config=/etc/katpool/origin-vmagent.yml \
+#     -remoteWrite.url=https://%{VM_REMOTE_WRITE_HOST}/api/v1/write \
+#     -remoteWrite.basicAuth.username=%{VM_RW_USER} \
+#     -remoteWrite.basicAuth.password=%{VM_RW_PASSWORD}
+# (Pin the vmagent version to the VictoriaMetrics server version. Secrets come
+#  from the systemd EnvironmentFile, not this tracked file.)
+
+global:
+  scrape_interval: 15s
+  external_labels:
+    origin: netcup-pool
+
+scrape_configs:
+  # The unified katpool runtime: bridge (ks_* share/block/worker/anti-abuse)
+  # plus accountant (ks_accountant_* event/insert/transition) families. The
+  # exporter already drops other instances' series, so no extra relabeling is
+  # needed; the `network` label disambiguates tn10 vs mainnet on one host.
+  - job_name: katpool
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["127.0.0.1:9302"]
+        labels:
+          network: mainnet
+
+  # kaspad node exporter, if enabled (gRPC on :16110; Prometheus metrics on the
+  # node's --rpclisten-borsh/metrics port when configured). Left commented until
+  # the node's metrics port is provisioned (ADR-0010/0017).
+  # - job_name: kaspad
+  #   static_configs:
+  #     - targets: ["127.0.0.1:9090"]
+  #       labels:
+  #         network: mainnet

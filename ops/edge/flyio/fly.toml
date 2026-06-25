@@ -1,0 +1,131 @@
+# katpool fly.io anycast stratum edge (ADR-0022).
+#
+# One app, one anycast IPv4, deployed to the 7 legacy regions. Each of the
+# 8 legacy stratum ports is a TCP service with the `proxy_proto` handler
+# (v2) so HAProxy on the machine receives the real miner IP and forwards it
+# to the NetCup origin. All legacy *.katpool.com names plus the new .com
+# mirror resolve to this app's anycast IP.
+#
+# Set the origin before first deploy:
+#   fly secrets set KATPOOL_ORIGIN_HOST=kas-origin.katpool.com
+# Allocate a DEDICATED anycast IPv4 (raw TCP does NOT work on fly's shared
+# IPv4 — that path needs TLS SNI / HTTP Host to route) plus a v6:
+#   fly ips allocate-v4            # dedicated; do NOT use --shared here
+#   fly ips allocate-v6
+# Stable per-region egress IPs for the origin nftables allowlist:
+#   fly ips allocate-egress -r sjc   # repeat for each region below
+# Spread across regions (anycast routes to the nearest healthy machine):
+#   fly scale count 7 --region sjc,iad,fra,sin,hkg,gru,syd
+# See README.md for the full runbook + the origin nftables allowlist.
+
+app = "katpool-edge"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# --- 1111 (seed 256) ---
+[[services]]
+  protocol = "tcp"
+  internal_port = 1111
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+  [[services.ports]]
+    port = 1111
+    handlers = ["proxy_proto"]
+    proxy_proto_options = { version = "v2" }
+
+# --- 2222 (seed 1024) ---
+[[services]]
+  protocol = "tcp"
+  internal_port = 2222
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+  [[services.ports]]
+    port = 2222
+    handlers = ["proxy_proto"]
+    proxy_proto_options = { version = "v2" }
+
+# --- 3333 (seed 4096) ---
+[[services]]
+  protocol = "tcp"
+  internal_port = 3333
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+  [[services.ports]]
+    port = 3333
+    handlers = ["proxy_proto"]
+    proxy_proto_options = { version = "v2" }
+
+# --- 4444 (seed 8192) ---
+[[services]]
+  protocol = "tcp"
+  internal_port = 4444
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+  [[services.ports]]
+    port = 4444
+    handlers = ["proxy_proto"]
+    proxy_proto_options = { version = "v2" }
+
+# --- 5555 (seed 16384) ---
+[[services]]
+  protocol = "tcp"
+  internal_port = 5555
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+  [[services.ports]]
+    port = 5555
+    handlers = ["proxy_proto"]
+    proxy_proto_options = { version = "v2" }
+
+# --- 6666 (seed 32768) ---
+[[services]]
+  protocol = "tcp"
+  internal_port = 6666
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+  [[services.ports]]
+    port = 6666
+    handlers = ["proxy_proto"]
+    proxy_proto_options = { version = "v2" }
+
+# --- 7777 (seed 65536) ---
+[[services]]
+  protocol = "tcp"
+  internal_port = 7777
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+  [[services.ports]]
+    port = 7777
+    handlers = ["proxy_proto"]
+    proxy_proto_options = { version = "v2" }
+
+# --- 8888 (seed 2048, legacy vardiff default) ---
+[[services]]
+  protocol = "tcp"
+  internal_port = 8888
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+  [[services.ports]]
+    port = 8888
+    handlers = ["proxy_proto"]
+    proxy_proto_options = { version = "v2" }
+
+# --- 8080 (legacy MiningPoolStats HTTP; plain TCP to origin nginx) ---
+[[services]]
+  protocol = "tcp"
+  internal_port = 8080
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+  [[services.ports]]
+    port = 8080

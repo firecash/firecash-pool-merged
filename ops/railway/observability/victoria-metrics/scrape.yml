@@ -1,0 +1,97 @@
+# VictoriaMetrics scrape config — RAILWAY side (the observability project).
+# Passed to single-node victoria-metrics via `-promscrape.config=/etc/vm/scrape.yml`
+# (Prometheus scrape_config format; VictoriaMetrics supports `%{ENV_VAR}`
+# placeholders, used below for the public hostnames so nothing is hard-coded).
+#
+# This file scrapes only what lives in, or is reachable from, the Railway
+# project: VM's own metrics and the Blackbox synthetic probes of the pool's
+# PUBLIC surface. The pool's own /metrics (KASPAD origin, loopback-bound on
+# mainnet — see ops/env/mainnet.env.example) is NOT scraped from here; the
+# origin pushes it in via `origin-vmagent.yml` (remote_write), which keeps the
+# observability stack in a different failure domain than the pool (ADR-0004).
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    origin: railway-observability
+
+scrape_configs:
+  # VictoriaMetrics self-monitoring.
+  - job_name: victoriametrics
+    static_configs:
+      - targets: ["127.0.0.1:8428"]
+
+  # vmalert self-monitoring (rule eval health, notifier queue).
+  - job_name: vmalert
+    static_configs:
+      - targets: ["vmalert.railway.internal:8880"]
+
+  # Blackbox HTTP probes of the pool's public health surface. The pool serves
+  # /health /ready /started on KATPOOL_API_PORT / KATPOOL_HEALTH_CHECK_PORT
+  # behind nginx+TLS (and the fly.io anycast edge for stratum). /ready is
+  # DB-reachable AND kaspad-synced, so a sustained probe failure is a real
+  # user-facing outage, not just a process blip.
+  - job_name: blackbox-http
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://%{KATPOOL_API_HOST}/health
+          - https://%{KATPOOL_API_HOST}/ready
+          - https://%{KATPOOL_API_HOST}/started
+        labels:
+          probe: api
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox.railway.internal:9115
+
+  # Blackbox TCP probe of the stratum endpoint miners connect to. A bare TCP
+  # connect verifies the advertised mining port is accepting connections — on
+  # testnet that is the origin directly (e.g. 152.53.37.182:15555); on mainnet it
+  # will be the fly.io anycast edge (the PROXY-v2 chain terminating at the
+  # origin). Host:port are env-driven (`%{KATPOOL_STRATUM_HOST}` /
+  # `%{KATPOOL_STRATUM_PORT}`) so nothing network-specific is hard-coded.
+  - job_name: blackbox-stratum-tcp
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets:
+          - "%{KATPOOL_STRATUM_HOST}:%{KATPOOL_STRATUM_PORT}"
+        labels:
+          probe: stratum
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox.railway.internal:9115
+
+  # Blackbox probes of the third-party indexer/price dependencies the KRC-20
+  # payout path leans on (ADR-0016/0019): the Kasplex indexer and the CoinGecko
+  # quote that backs the KAS-per-NACHO floor price. Pairs with the
+  # IndexerDependency* alerts and the in-process circuit-breaker metrics (B7).
+  - job_name: blackbox-indexers
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://api.kasplex.org/v1/info
+          - "https://api.coingecko.com/api/v3/simple/price?ids=nacho-the-kat,kaspa&vs_currencies=usd"
+        labels:
+          probe: indexer
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox.railway.internal:9115

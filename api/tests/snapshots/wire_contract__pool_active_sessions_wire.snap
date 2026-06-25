@@ -1,0 +1,8 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "active_sessions": 5,
+  "active_workers": 3
+}

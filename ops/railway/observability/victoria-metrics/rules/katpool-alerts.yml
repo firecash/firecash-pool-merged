@@ -1,0 +1,321 @@
+# vmalert alerting rules for katpool (B5/B7).
+#
+# Evaluated by vmalert against VictoriaMetrics; firing alerts are sent to
+# Alertmanager (→ ntfy). Every alert carries a `runbook_url` annotation that
+# resolves to a real file under docs/runbooks/ — the on-call contract from
+# ADR-0004. Severities: `page` (wake someone), `warning` (next business hour).
+#
+# Metric provenance (only what the pool actually emits today):
+#   bridge/src/prom.rs        ks_*               (shares, blocks, workers, anti-abuse)
+#   accountant/src/metrics.rs ks_accountant_*    (event pipeline, DB writes)
+#   katpool-metrics (B7)      ks_payout_* / ks_treasury_*  (payout engines + consolidation)
+#   blackbox exporter         probe_*            (synthetic HTTP/TCP probes)
+#   victoria-metrics          up                 (scrape liveness)
+#
+# Gaps deliberately NOT guessed at (no metric exists yet — tracked for a
+# follow-up that adds instrumentation, alerted via Loki log rules until then):
+#   - tier-classifier circuit-breaker open state (logged, not metered)
+# See SLO.md.
+
+groups:
+  # ---------------------------------------------------------------------------
+  - name: katpool-availability
+    interval: 30s
+    rules:
+      - alert: PoolMetricsExporterDown
+        expr: up{job="katpool"} == 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Pool metrics exporter is down ({{ $labels.network }})"
+          description: >-
+            VictoriaMetrics has not been able to scrape katpool /metrics for 5m.
+            Either the origin vmagent, the pool process, or the network path is
+            down — telemetry is blind until resolved.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/06-miner-visible-outage.md"
+
+      - alert: ApiReadinessProbeFailing
+        expr: probe_success{probe="api", instance=~".*/ready"} == 0
+        for: 3m
+        labels:
+          severity: page
+        annotations:
+          summary: "Public API /ready failing ({{ $labels.instance }})"
+          description: >-
+            The /ready probe (DB-reachable AND kaspad-synced) has failed for 3m.
+            Miners and the dashboard see a degraded or down pool.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/06-miner-visible-outage.md"
+
+      - alert: StratumEdgeUnreachable
+        expr: probe_success{probe="stratum"} == 0
+        for: 3m
+        labels:
+          severity: page
+        annotations:
+          summary: "Stratum port {{ $labels.instance }} not accepting connections"
+          description: >-
+            TCP connect to the advertised stratum endpoint has failed for 3m.
+            The anycast edge → HAProxy → origin path is broken; miners cannot
+            connect.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/06-miner-visible-outage.md"
+
+  # ---------------------------------------------------------------------------
+  - name: katpool-pool-health
+    interval: 1m
+    rules:
+      - alert: NoSharesIngested
+        expr: sum(rate(ks_valid_share_counter[10m])) == 0
+        for: 30m
+        labels:
+          severity: page
+        annotations:
+          summary: "No valid shares ingested for 30m"
+          description: >-
+            The pool has accepted zero valid shares for 30m. If miners are
+            connected this is an outage (job distribution, validation, or edge);
+            if it is expected (no miners), silence this alert.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/06-miner-visible-outage.md"
+
+      - alert: BlocksStoppedBeingFound
+        # Window is pool-hashrate-dependent; 6h is a conservative starting point
+        # to be re-derived from the live block-interval baseline (see SLO.md).
+        expr: increase(ks_blocks_mined[6h]) == 0 and sum(rate(ks_valid_share_counter[1h])) > 0
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: "No blocks found in 6h despite active hashrate"
+          description: >-
+            Shares are flowing but no block has been mined in 6h. Suspect node
+            template/submission problems rather than miner-side issues.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/01-blocks-stopped-being-found.md"
+
+      - alert: NodeChainNotAdvancing
+        expr: increase(ks_network_block_count[10m]) == 0
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "kaspad chain not advancing (network block count flat)"
+          description: >-
+            The connected node's reported network block count has not moved for
+            10m — typically lost peers or a stalled node.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/03-kaspad-lost-peers.md"
+
+      - alert: BlocksNotConfirmingBlue
+        expr: >-
+          sum(increase(ks_blocks_not_confirmed_blue[1h]))
+            / clamp_min(sum(increase(ks_blocks_accepted_by_node[1h])), 1) > 0.2
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High share of node-accepted blocks not confirming blue"
+          description: >-
+            >20% of node-accepted blocks failed to confirm blue in the last
+            hour. Persistent red blocks erode pool luck and may indicate a
+            node/DAG health problem.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/01-blocks-stopped-being-found.md"
+
+  # ---------------------------------------------------------------------------
+  - name: katpool-share-quality
+    interval: 1m
+    rules:
+      - alert: HighInvalidShareRatio
+        expr: >-
+          sum(rate(ks_invalid_share_counter[10m]))
+            / clamp_min(sum(rate(ks_valid_share_counter[10m])) + sum(rate(ks_invalid_share_counter[10m])), 1) > 0.1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Invalid-share ratio above 10% ({{ $value | humanizePercentage }})"
+          description: >-
+            More than 10% of submitted shares are invalid (stale/duplicate/weak)
+            for 15m. Check difficulty tuning, edge latency, or a misbehaving
+            miner; a storage-mass burst is a related but distinct failure.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/07-storage-mass-rejection-burst.md"
+
+      - alert: WorkerErrorSpike
+        expr: sum(rate(ks_worker_errors[10m])) by (error) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker error '{{ $labels.error }}' sustained"
+          description: >-
+            Worker-level errors of type '{{ $labels.error }}' exceed 1/s over
+            10m. Could be a storage-mass rejection burst or a protocol problem.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/07-storage-mass-rejection-burst.md"
+
+  # ---------------------------------------------------------------------------
+  - name: katpool-abuse
+    interval: 1m
+    rules:
+      - alert: StratumAbuseBurst
+        expr: >-
+          sum(rate(ks_anti_abuse_connection_reject_total[5m]))
+            + sum(rate(ks_anti_abuse_frame_rate_limited_total[5m]))
+            + sum(rate(ks_anti_abuse_malformed_frame_total[5m]))
+            + sum(rate(ks_anti_abuse_bad_address_total[5m])) > 50
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Stratum anti-abuse rejections elevated (>50/s)"
+          description: >-
+            The per-IP anti-abuse guards are rejecting connections/frames at a
+            high rate — a flood or abusive client. Verify legitimate miners are
+            not collateral (e.g. behind a shared NAT/edge IP).
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/08-stratum-flood-or-abuse.md"
+
+  # ---------------------------------------------------------------------------
+  - name: katpool-accountant
+    interval: 1m
+    rules:
+      - alert: AccountantEventErrors
+        expr: sum(rate(ks_accountant_event_errors_total[10m])) by (variant, kind) > 0
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "Accountant event errors ({{ $labels.variant }}/{{ $labels.kind }})"
+          description: >-
+            The accountant is failing to handle pool events — share/block
+            accounting may be incorrect or incomplete. This is on the money path.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/00-on-call-overview.md"
+
+      - alert: AccountantEventsLagging
+        expr: increase(ks_accountant_events_lagged_total[10m]) > 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Accountant dropped events (broadcast lag)"
+          description: >-
+            The accountant's event channel lagged and skipped events in the last
+            10m — shares/blocks may be uncredited. Investigate consumer
+            throughput and DB write latency immediately.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/00-on-call-overview.md"
+
+      - alert: AccountantShareWritesStalled
+        expr: sum(rate(ks_accountant_share_inserts_total[10m])) == 0 and sum(rate(ks_valid_share_counter[10m])) > 0
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: "Shares accepted but none persisted"
+          description: >-
+            Valid shares are being accepted by the bridge but the accountant has
+            written zero share rows for 15m — a DB-write outage that will lose
+            payout-relevant data.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/04-postgres-restore-from-backup.md"
+
+  # ---------------------------------------------------------------------------
+  - name: katpool-payout
+    interval: 1m
+    rules:
+      - alert: PayoutCycleFailing
+        expr: increase(ks_payout_cycles_total{status=~"failed|error"}[1h]) > 0
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: "Payout cycle failing ({{ $labels.engine }} on {{ $labels.network }})"
+          description: >-
+            A {{ $labels.engine }} payout cycle reached a failed/errored terminal
+            status in the last hour. Funds are not moving and the unpaid backlog
+            will grow — investigate the treasury, node, or DB. This is the money
+            path.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/02-nacho-payout-failed.md"
+
+      - alert: TreasuryBalanceLow
+        # Operator-tunable floor in sompi (1 KAS = 100_000_000 sompi). Starting
+        # value is 100 KAS; raise it for mainnet payout sizing, lower/silence for
+        # deliberately low-balance testnets. Sourced from the consolidation
+        # snapshot gauge — if consolidation is disabled the series is absent and
+        # this stays inert. See SLO.md.
+        expr: ks_treasury_balance_sompi < 10000000000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Treasury spendable balance low ({{ $labels.network }})"
+          description: >-
+            The spendable treasury balance is below the configured floor. Top up
+            the treasury before it can no longer fund a payout cycle.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/05-treasury-balance-below-threshold.md"
+
+  # ---------------------------------------------------------------------------
+  - name: katpool-dependencies
+    interval: 1m
+    rules:
+      - alert: IndexerDependencyDown
+        expr: probe_success{probe="indexer"} == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Indexer dependency unreachable ({{ $labels.instance }})"
+          description: >-
+            A third-party indexer the KRC-20 payout path depends on has been
+            unreachable for 10m. The in-process circuit breaker should open and
+            fall back safely (under-rebate / breaker-open) — verify that
+            fallback is happening and KRC-20 payouts are not stuck.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/02-nacho-payout-failed.md"
+
+  # ---------------------------------------------------------------------------
+  - name: katpool-dr
+    interval: 1m
+    rules:
+      # `dr_validator_*` are pushed weekly by ops/dr/dr-validate.sh (ADR-0009,
+      # Runbook 10) — a low-frequency metric, so `last_over_time[14d]` retrieves
+      # the most recent value rather than letting it go stale between runs.
+      - alert: DRValidatorMissed
+        expr: time() - last_over_time(dr_validator_last_success_timestamp_seconds[14d]) > 864000
+        for: 1h
+        labels:
+          severity: page
+        annotations:
+          summary: "DR validator has not passed in over 10 days"
+          description: >-
+            No successful backup → restore → reconcile run has completed in 10
+            days. Backups are unverified — the restore path may be silently
+            broken. Run/inspect the validator before relying on DR.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/10-automated-dr-validation.md"
+
+      - alert: DRValidatorFailed
+        expr: last_over_time(dr_validator_success[14d]) == 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "DR validator's most recent run reported a mismatch"
+          description: >-
+            The latest backup → restore → reconcile run failed (schema
+            incomplete, a core table empty, or referential integrity broken in
+            the restore). Backups cannot be trusted until resolved.
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/10-automated-dr-validation.md"
+
+  # ---------------------------------------------------------------------------
+  - name: katpool-canary
+    interval: 1m
+    rules:
+      # ADR-0004 confirmation alert. Requires the canary-miner service (a small
+      # external miner submitting real shares from outside the VPS) to export
+      # `canary_last_credited_timestamp_seconds`. Until the canary is deployed
+      # this alert stays pending/absent — the metric simply does not exist yet.
+      - alert: CanaryMinerNotPaid
+        expr: time() - max(canary_last_credited_timestamp_seconds) > 3600
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: "Canary miner has not been credited in over an hour"
+          description: >-
+            The synthetic canary miner submits real shares from outside the VPS;
+            if it has not been credited for >1h the end-to-end accept→credit
+            path is broken even when internal metrics look healthy. This is the
+            ground-truth "are we actually paying miners" probe (ADR-0004).
+          runbook_url: "https://github.com/Nacho-the-Kat/katpool/blob/main/docs/runbooks/06-miner-visible-outage.md"

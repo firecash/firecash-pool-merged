@@ -1,0 +1,17 @@
+; katpool-treasury-audit.timer.in — runs the treasury key audit hourly.
+; Rendered per network by scripts/deploy.sh (__NETWORK__) and installed as
+; /etc/systemd/system/katpool-treasury-audit-__NETWORK__.timer.
+[Unit]
+Description=Periodic katpool treasury key-rotation audit (__NETWORK__)
+Documentation=file:///root/katpool/docs/runbooks/11-key-rotation.md
+
+[Timer]
+OnCalendar=hourly
+; Spread load and avoid a thundering herd across instances.
+RandomizedDelaySec=300
+; Catch up one run if the host was down at the scheduled time.
+Persistent=true
+Unit=katpool-treasury-audit-__NETWORK__.service
+
+[Install]
+WantedBy=timers.target

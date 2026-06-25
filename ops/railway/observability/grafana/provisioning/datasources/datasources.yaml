@@ -1,0 +1,46 @@
+# Grafana provisioned datasources (B5). Grafana loads this at startup from
+# /etc/grafana/provisioning/datasources/. Internal Railway DNS names; no
+# secrets (the stack is private within the project).
+
+apiVersion: 1
+
+datasources:
+  # VictoriaMetrics speaks the Prometheus query API.
+  - name: VictoriaMetrics
+    uid: victoriametrics
+    type: prometheus
+    access: proxy
+    url: http://victoriametrics.railway.internal:8428
+    isDefault: true
+    jsonData:
+      timeInterval: 15s
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki.railway.internal:3100
+    jsonData:
+      # Click a log line's trace id → jump to the matching Tempo trace.
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"trace_id":"(\w+)"'
+          url: "$${__value.raw}"
+          datasourceUid: tempo
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo.railway.internal:3200
+    jsonData:
+      # Trace → logs (Loki) and trace → metrics (VM) correlation.
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: -1h
+        spanEndTimeShift: 1h
+        filterByTraceID: true
+      tracesToMetrics:
+        datasourceUid: victoriametrics
+      serviceMap:
+        datasourceUid: victoriametrics

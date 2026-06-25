@@ -1,0 +1,51 @@
+[package]
+name = "katpool-secrets"
+description = "Treasury-key custody: sops/age decryption, mlock, zeroize, lifecycle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# This crate is the ONE place sanctioned to use `unsafe` (ADR-0008):
+# `mlock(2)`/`munlock(2)` are FFI and inherently unsafe, so we cannot
+# inherit the workspace `unsafe_code = "forbid"`. The table below mirrors
+# the workspace lints verbatim except `unsafe_code` is `deny` (overridable
+# per-block with a `SAFETY:` justification) instead of `forbid`.
+[lints.rust]
+unsafe_code = "deny"
+unused_extern_crates = "warn"
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+integer_division = "deny"
+float_arithmetic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
+[dependencies]
+secrecy = { workspace = true }
+zeroize = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+hex = { workspace = true }
+libc = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

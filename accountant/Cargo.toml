@@ -1,0 +1,51 @@
+[package]
+name = "accountant"
+description = "Pool accountant: subscribes to share + block events, computes PROP allocations, writes balances"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+katpool-domain = { path = "../crates/katpool-domain" }
+katpool-db = { path = "../crates/katpool-db" }
+# Kaspad gRPC client + supporting types — used by the
+# `kaspad_grpc` module to back the `KaspadClient` trait against a
+# real kaspad endpoint.
+kaspa-addresses = { workspace = true }
+kaspa-grpc-client = { workspace = true }
+kaspa-hashes = { workspace = true }
+kaspa-rpc-core = { workspace = true }
+# `katpool-metrics`, `katpool-idempotency`, `katpool-telemetry` may
+# be wired when their public APIs settle for production metrics.
+tokio = { workspace = true, features = ["sync", "macros", "rt-multi-thread", "time", "signal"] }
+tracing-subscriber = { workspace = true }
+sqlx = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+prometheus = { workspace = true }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+uuid = { workspace = true }
+# IP→country resolution for session geo (ADR-0025). Optional at runtime:
+# the resolver is only constructed when a GeoLite2 .mmdb path is configured.
+maxminddb = { workspace = true }
+anyhow = "1.0"
+
+[dev-dependencies]
+proptest = { workspace = true }
+testcontainers = { workspace = true }
+testcontainers-modules = { workspace = true }
+uuid = { workspace = true }
+wiremock = { workspace = true }
+serde_json = { workspace = true }

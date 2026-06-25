@@ -1,0 +1,129 @@
+// Grafana Alloy — netcup ORIGIN collector for the katpool unified runtime.
+//
+// The pool writes structured JSON logs to journald (KATPOOL_LOG_FORMAT=json) and
+// exports OTLP/gRPC spans to localhost (KATPOOL_OTLP_ENDPOINT=http://127.0.0.1:4317).
+// This agent tails that one unit and receives those spans, then egresses BOTH to
+// the Railway LGTM stack through the public, basic-auth'd vmauth door — Loki
+// (auth_enabled:false) and Tempo carry no auth of their own and are not publicly
+// reachable, and the pool's OTLP exporter is gRPC-only with no auth headers, so a
+// local collector is the only way to authenticate the egress. Metrics take a
+// separate path (vmagent -> vmauth); this agent handles logs + traces only.
+//
+// All deployment-specific values come from the environment so the same file
+// serves tn10 and mainnet:
+//   VMAUTH_URL            e.g. https://vmauth-stage-testnet-10.up.railway.app
+//   VMAUTH_USER           vmauth basic-auth user (same identity as the vmagent)
+//   VMAUTH_PASSWORD       vmauth basic-auth password
+//   KATPOOL_NETWORK       log/trace label, e.g. testnet-10
+//   KATPOOL_INSTANCE      pool instance id, e.g. tn10-phase5 (correlates w/ metrics)
+//   KATPOOL_JOURNAL_UNIT  systemd unit to tail, e.g. katpool-tn10.service
+//   KATPOOL_OTLP_GRPC_ADDR  OTLP/gRPC receive address; defaults to 127.0.0.1:4317.
+//                           Override only when two origin agents share a host
+//                           (mainnet co-resident with tn10 → e.g. 127.0.0.1:4327);
+//                           it must match the pool's KATPOOL_OTLP_ENDPOINT.
+//
+// The host journal is mounted read-only at /var/log/journal regardless of whether
+// the host stores it persistently (/var/log/journal) or volatile (/run/log/journal).
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// ---- Logs: journald (one unit) -> Loki via vmauth -------------------------
+loki.source.journal "katpool" {
+  forward_to = [loki.write.vmauth.receiver]
+  path       = "/var/log/journal"
+  matches    = "_SYSTEMD_UNIT=" + sys.env("KATPOOL_JOURNAL_UNIT")
+  labels     = {
+    job      = "katpool",
+    network  = sys.env("KATPOOL_NETWORK"),
+    instance = sys.env("KATPOOL_INSTANCE"),
+    origin   = "netcup-pool",
+  }
+}
+
+loki.write "vmauth" {
+  endpoint {
+    url = sys.env("VMAUTH_URL") + "/loki/api/v1/push"
+    basic_auth {
+      username = sys.env("VMAUTH_USER")
+      password = sys.env("VMAUTH_PASSWORD")
+    }
+  }
+  // Durable buffering: persist log entries to the WAL (under --storage.path,
+  // mounted on a host volume) before remote-write, so a vmauth/Railway blip or
+  // an agent restart does not drop logs — they replay when the door reopens.
+  wal {
+    enabled         = true
+    max_segment_age = "1h"
+    drain_timeout   = "30s"
+  }
+}
+
+// ---- Traces: pool OTLP/gRPC (localhost) -> Tempo via vmauth (OTLP/HTTP) ----
+// The exporter posts to <endpoint>/v1/traces, which vmauth routes to Tempo's
+// OTLP/HTTP receiver (:4318). gRPC cannot traverse vmauth, hence the protocol
+// switch here.
+otelcol.receiver.otlp "pool" {
+  grpc {
+    // Defaults to 127.0.0.1:4317; override via KATPOOL_OTLP_GRPC_ADDR when a
+    // second origin agent shares the host (co-resident mainnet + tn10).
+    endpoint = coalesce(sys.env("KATPOOL_OTLP_GRPC_ADDR"), "127.0.0.1:4317")
+  }
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.processor.tail_sampling.vmauth.input]
+  }
+}
+
+// Tail sampling bounds Tempo's volume at mainnet API request rates while always
+// keeping the traces that matter. On tn10 the probabilistic policy is 100 (keep
+// everything — the volume is tiny); lower `sampling_percentage` for mainnet
+// (e.g. 20) and error/slow traces are still kept in full by the other policies.
+otelcol.processor.tail_sampling "vmauth" {
+  // Keep any trace with an error span, regardless of the sample roll.
+  policy {
+    name = "errors"
+    type = "status_code"
+    status_code {
+      status_codes = ["ERROR"]
+    }
+  }
+  // Keep the slow tail (latency outliers are the point of having traces).
+  policy {
+    name = "slow"
+    type = "latency"
+    latency {
+      threshold_ms = 500
+    }
+  }
+  // Sample the rest. 100 = keep all (tn10 default); lower for mainnet volume.
+  policy {
+    name = "sample-rest"
+    type = "probabilistic"
+    probabilistic {
+      sampling_percentage = 100
+    }
+  }
+  output {
+    traces = [otelcol.exporter.otlphttp.vmauth.input]
+  }
+}
+
+otelcol.exporter.otlphttp "vmauth" {
+  client {
+    endpoint = sys.env("VMAUTH_URL")
+    auth     = otelcol.auth.basic.vmauth.handler
+  }
+}
+
+otelcol.auth.basic "vmauth" {
+  username = sys.env("VMAUTH_USER")
+  password = sys.env("VMAUTH_PASSWORD")
+}

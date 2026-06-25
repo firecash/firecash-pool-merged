@@ -1,0 +1,36 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "address": "kaspa:qz4j8mu269z8llgcczmfukm9fan2fq822kzxu4cfukd5fqrhxpsv2zhs9jxnp",
+  "network": "mainnet",
+  "kas": {
+    "allocated": {
+      "sompi": "900000000",
+      "kas": "9"
+    },
+    "paid": {
+      "sompi": "200000000",
+      "kas": "2"
+    },
+    "payable": {
+      "sompi": "700000000",
+      "kas": "7"
+    }
+  },
+  "nacho_rebate": {
+    "accrued": {
+      "sompi": "25000000",
+      "kas": "0.25"
+    },
+    "paid": {
+      "sompi": "0",
+      "kas": "0"
+    },
+    "pending": {
+      "sompi": "25000000",
+      "kas": "0.25"
+    }
+  }
+}

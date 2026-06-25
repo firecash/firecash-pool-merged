@@ -1,0 +1,51 @@
+# Optional layered config file for the katpool runtime (A3).
+#
+# Point the runtime at this file with KATPOOL_CONFIG=/etc/katpool/<net>.yaml.
+# It is parsed + validated by the `katpool-config` crate (TOML is also
+# accepted; format is inferred from the file extension).
+#
+# PRECEDENCE — environment variable > config file > built-in default.
+# An env var ALWAYS wins; this file only fills keys the env leaves unset. With
+# no KATPOOL_CONFIG set the runtime behaves exactly as pure-environment config.
+#
+# Keys mirror the KATPOOL_* / KASPAD_* environment variables, lowercased and
+# without the prefix (e.g. KATPOOL_STRATUM_PORT -> stratum_port). Only the core
+# runtime surface lives here. Payout, KRC-20, consolidation, and treasury-key
+# settings are intentionally env-only (they carry secrets or money-movement
+# policy) and are rejected here as unknown keys.
+#
+# Unknown keys and out-of-range values abort the boot — there are no silent
+# fallbacks. All keys below are optional; delete any you want to source from
+# the environment or leave at the built-in default (shown in comments).
+
+# --- Node / database / network identity ---
+# kaspad_url: "grpc://127.0.0.1:16210"
+# database_url: "postgres://katpool:CHANGE_ME@127.0.0.1:5432/katpool"
+# pool_address: "kaspatest:CHANGE_ME"        # comma-separated for multiple
+# network: "testnet-10"                       # normally derived from the address prefix
+# instance_id: "katpool-runtime"              # default: katpool-runtime
+
+# --- Stratum ---
+# stratum_port: "5701"
+# stratum_ports: "5701:4096,5702:8192"        # multi-port: port:seed pairs
+# min_share_diff: 4096                         # default 4096; must be >= 1
+# var_diff: true                               # default true
+# shares_per_min: 20                           # default 20; must be >= 1
+# proxy_protocol: false                        # default false (PROXY v2 header)
+# fee_topline_bps: 75                          # default 75; 0..=10000
+# broadcast_capacity: 4096                     # default 4096; must be >= 1
+
+# --- Listeners (host:port or :port for all interfaces; empty disables) ---
+# prom_port: ":9302"
+# api_port: "127.0.0.1:8080"
+# health_check_port: ":9301"
+
+# --- Maturity tracker ---
+# maturity_poll_secs: 15                       # default 15; must be >= 1
+# coinbase_maturity: 1000                      # default 1000 (DAA-score depth)
+# window_daa_span: 600                         # default 600
+# maturity_batch_size: 200                     # default 200
+
+# --- Operational toggles ---
+# tier_classifier: "static"                    # static (default) or kasplex
+# shutdown_drain_secs: 10                      # default 10

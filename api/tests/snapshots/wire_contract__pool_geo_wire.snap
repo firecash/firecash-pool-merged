@@ -1,0 +1,19 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "window_secs": 86400,
+  "entries": [
+    {
+      "country": "US",
+      "workers": 12,
+      "sessions": 18
+    },
+    {
+      "country": "DE",
+      "workers": 4,
+      "sessions": 5
+    }
+  ]
+}

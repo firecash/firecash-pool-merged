@@ -1,0 +1,131 @@
+; katpool-kaspad-tn10.service — hardened rusty-kaspa (testnet-10).
+;
+; Mirrors the hardening profile of katpool-bridge.service. Target:
+; `systemd-analyze security katpool-kaspad-tn10` ≤ 2.5 exposure.
+;
+; This unit runs the upstream rusty-kaspa binary at the pinned
+; `tn10-toc2` release, which contains the Toccata hardfork rules
+; (activation: testnet-10 DAA 467,579,632, 2026-05-18 16:00 UTC). See
+; ADR-0010 for why we run a separate kaspad-tn10 alongside the
+; existing dockerized mainnet kaspad.
+;
+; Installation
+;
+;   sudo /root/katpool/ops/kaspad/install-kaspad-tn10.sh
+;   sudo systemctl enable --now katpool-kaspad-tn10
+;
+; Operator overrides go in
+;   /etc/systemd/system/katpool-kaspad-tn10.service.d/*.conf
+
+[Unit]
+Description=Katpool — rusty-kaspa testnet-10 node (Toccata-aware)
+Documentation=https://github.com/Nacho-the-Kat/katpool
+Documentation=https://github.com/kaspanet/rusty-kaspa
+Requires=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+
+User=kaspad-tn10
+Group=kaspad-tn10
+
+; ----- Resource limits -----------------------------------------------
+; rusty-kaspa opens many sockets to peers and accepts many client
+; connections. 65,536 matches upstream's documented defaults.
+LimitNOFILE=65536
+LimitNPROC=4096
+TasksMax=4096
+
+; ----- Restart policy ------------------------------------------------
+Restart=always
+RestartSec=5s
+
+; ----- Binary + arguments --------------------------------------------
+; - --testnet: testnet network family
+; - --netsuffix=10: pin to testnet-10 (vs testnet-11)
+; - --utxoindex: required for any RPC client that does balance lookups
+;   (including the bridge's block-template path)
+; - --rpclisten:       gRPC      0.0.0.0:16210 (Phase 1 smoke source)
+; - --rpclisten-borsh: wRPC      0.0.0.0:17210
+; - --rpclisten-json:  wRPC-json 0.0.0.0:18210
+; - --listen:          P2P       0.0.0.0:16211
+; - --appdir: pin the data dir explicitly so StateDirectory= owns it
+; - --nologfiles: send logs to stdout (journalctl-managed); avoids
+;   rusty-kaspa's own rotating log files duplicating journald storage
+; - --disable-upnp: this host has fixed networking, no UPnP needed
+ExecStart=/usr/local/bin/kaspad-tn10 \
+    --yes \
+    --testnet \
+    --netsuffix=10 \
+    --utxoindex \
+    --disable-upnp \
+    --nologfiles \
+    --appdir=/var/lib/kaspad-tn10/data \
+    --listen=0.0.0.0:16211 \
+    --rpclisten=0.0.0.0:16210 \
+    --rpclisten-borsh=0.0.0.0:17210 \
+    --rpclisten-json=0.0.0.0:18210
+
+WorkingDirectory=/var/lib/kaspad-tn10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=katpool-kaspad-tn10
+TimeoutStartSec=120s
+TimeoutStopSec=120s
+
+; ----- Filesystem hardening ------------------------------------------
+StateDirectory=kaspad-tn10
+StateDirectoryMode=0750
+ReadWritePaths=/var/lib/kaspad-tn10
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateMounts=yes
+ProtectProc=invisible
+ProcSubset=pid
+
+; ----- Kernel hardening ----------------------------------------------
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+
+; ----- Capabilities --------------------------------------------------
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+
+; ----- Memory / execution --------------------------------------------
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+
+; ----- Network surface -----------------------------------------------
+; kaspad needs IPv4 + IPv6 for peer-to-peer + JSON-RPC. AF_UNIX kept
+; for journald.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+; ----- Syscall filter ------------------------------------------------
+; @system-service is the documented baseline for long-running daemons.
+; We additionally subtract privileged/raw-io/swap/etc.
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @raw-io @reboot @swap @cpu-emulation
+SystemCallErrorNumber=EPERM
+
+; ----- Misc ----------------------------------------------------------
+UMask=0077
+KeyringMode=private
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

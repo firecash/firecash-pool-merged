@@ -1,0 +1,21 @@
+[package]
+name = "katpool-telemetry"
+description = "tracing-subscriber + OpenTelemetry OTLP wiring, structured-JSON logs, correlation-id propagation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tracing-subscriber = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+thiserror = { workspace = true }

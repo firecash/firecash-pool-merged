@@ -1,0 +1,17 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "address": "kaspa:qz4j8mu269z8llgcczmfukm9fan2fq822kzxu4cfukd5fqrhxpsv2zhs9jxnp",
+  "window_secs": 600,
+  "workers": [
+    {
+      "name": "rig-01",
+      "first_seen_at": "2025-12-01T00:00:00Z",
+      "last_seen_at": "2026-01-02T03:04:05Z",
+      "accepted_shares": 512,
+      "hashrate_hs": 3200000000.0
+    }
+  ]
+}

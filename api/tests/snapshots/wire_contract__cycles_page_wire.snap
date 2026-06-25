@@ -1,0 +1,23 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "cycles": [
+    {
+      "id": 7,
+      "kind": "kas",
+      "status": "settled",
+      "daa_start": 1000,
+      "daa_end": 2000,
+      "planned_at": "2026-01-02T00:00:00Z",
+      "settled_at": "2026-01-02T00:05:00Z",
+      "total": {
+        "sompi": "500000000",
+        "kas": "5"
+      },
+      "total_recipients": 3
+    }
+  ],
+  "next_before": null
+}

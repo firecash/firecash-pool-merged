@@ -1,0 +1,36 @@
+[package]
+name = "api"
+description = "Public read-only HTTP API: /health, /api/v1/pool/*, /api/v1/balance, /api/v1/miners/*, /api/v1/full_rebate/*"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+katpool-domain = { path = "../crates/katpool-domain" }
+katpool-db = { path = "../crates/katpool-db" }
+sqlx = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+tower-http = { workspace = true }
+tower_governor = { workspace = true }
+moka = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+reqwest = { workspace = true }
+testcontainers = { workspace = true }
+testcontainers-modules = { workspace = true }

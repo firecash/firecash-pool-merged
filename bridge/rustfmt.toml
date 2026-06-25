@@ -1,0 +1,15 @@
+# Vendored from rusty-kaspa v1.1.0 (.rustfmt.toml). Kept in the bridge/
+# subdirectory so rustfmt formats this crate to upstream's style while
+# our own code at the workspace root uses /rustfmt.toml.
+#
+# Rationale: upstream uses max_width=135 + use_small_heuristics="Max",
+# which is wider than our workspace 100-column convention. Reformatting
+# the bridge to our style would produce a 1000+ line intrusive diff
+# from upstream for no functional benefit and would make future
+# re-vendor merges miserable.
+max_width = 135
+use_field_init_shorthand = true
+use_try_shorthand = true
+use_small_heuristics = "Max"
+newline_style = "auto"
+edition = "2024"

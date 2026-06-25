@@ -1,0 +1,40 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "as_of": "2026-01-02T03:04:05Z",
+  "window_secs": 600,
+  "miners_active": 3,
+  "workers_active": 5,
+  "hashrate_hs": 1230000000000.0,
+  "accepted_shares": 4096,
+  "blocks": {
+    "found": 2,
+    "submitted_to_node": 1,
+    "confirmed_blue": 0,
+    "matured": 7,
+    "orphaned": 1
+  },
+  "payouts": {
+    "kas_confirmed": {
+      "sompi": "173951600000",
+      "kas": "1739.516"
+    },
+    "nacho_confirmed": {
+      "sompi": "50000000",
+      "kas": "0.5"
+    },
+    "confirmed_payouts": 12
+  },
+  "treasury": {
+    "captured_at": "2026-01-02T03:04:05Z",
+    "kas_balance": {
+      "sompi": "9900000000",
+      "kas": "99"
+    },
+    "nacho_balance": "123456789",
+    "daa_score": 414699558,
+    "blue_score": 414700000
+  }
+}

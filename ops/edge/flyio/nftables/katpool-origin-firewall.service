@@ -1,0 +1,22 @@
+[Unit]
+# Reboot-persistence for the fly.io anycast origin firewall (ADR-0022). The host
+# does not enable the distro nftables.service (its /etc/nftables.conf does a
+# `flush ruleset` that would wipe Docker's tables), so this oneshot reloads ONLY
+# our self-contained `inet katpool` table from the drop-in installed by
+# ops/edge/flyio/nftables/apply-origin-firewall.sh. The ruleset adds+deletes+
+# recreates just its own table, so it never disturbs Docker or the host filter
+# tables and ordering against docker.service is irrelevant.
+Description=Katpool origin stratum firewall (fly egress allowlist)
+Documentation=https://github.com/Nacho-the-Kat/katpool/blob/main/ops/edge/flyio/README.md
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/nftables.d/katpool-stratum.nft
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/nftables.d/katpool-stratum.nft
+ExecReload=/usr/sbin/nft -f /etc/nftables.d/katpool-stratum.nft
+
+[Install]
+WantedBy=multi-user.target

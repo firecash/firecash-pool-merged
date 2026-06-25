@@ -1,0 +1,14 @@
+# Clippy config. Lint levels live in Cargo.toml (workspace.lints.clippy);
+# this file is for thresholds and metadata only.
+
+# MSRV must match rust-toolchain.toml. Clippy uses this to avoid
+# suggesting features unavailable on our pinned Rust.
+msrv = "1.91.0"
+
+# Cognitive complexity threshold. Default is 25; we keep the default to
+# avoid forcing premature refactors but rely on review to catch genuinely
+# tangled logic.
+cognitive-complexity-threshold = 25
+
+# Names disallowed in identifiers (anti-typo guards).
+disallowed-names = ["foo", "bar", "baz", "qux", "fizz", "buzz", "tmp", "temp"]

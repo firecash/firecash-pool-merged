@@ -1,0 +1,11 @@
+# rustfmt config. Minimal: rely on stable defaults; explicitly set only
+# settings that are still stable but not the default.
+#
+# Run on every save (via editor integration) and enforced in CI via
+# `cargo fmt --all --check`.
+
+edition = "2024"
+max_width = 100
+newline_style = "Unix"
+use_field_init_shorthand = true
+use_try_shorthand = true

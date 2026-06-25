@@ -1,0 +1,19 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "address": "kaspa:qz4j8mu269z8llgcczmfukm9fan2fq822kzxu4cfukd5fqrhxpsv2zhs9jxnp",
+  "window_secs": 600,
+  "total": 9,
+  "by_reason": [
+    {
+      "reason": "low_difficulty",
+      "count": 6
+    },
+    {
+      "reason": "stale",
+      "count": 3
+    }
+  ]
+}

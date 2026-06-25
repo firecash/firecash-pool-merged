@@ -1,0 +1,23 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "blocks": [
+    {
+      "id": 42,
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "matured",
+      "daa_score": 414699558,
+      "blue_score": 414700000,
+      "found_at": "2026-01-02T03:00:00Z",
+      "confirmed_at": "2026-01-02T03:01:00Z",
+      "matured_at": "2026-01-02T06:00:00Z",
+      "reward": {
+        "sompi": "11000000000",
+        "kas": "110"
+      }
+    }
+  ],
+  "next_before": 42
+}

@@ -1,0 +1,132 @@
+; katpool-bridge.service — hardened systemd unit for the stratum bridge.
+;
+; Target: `systemd-analyze security katpool-bridge` should report
+; "exposure level: SAFE" (numeric ≤ 2.0). The directives below were
+; chosen by running that tool iteratively against this unit and removing
+; every credit-improving control that does not break the bridge.
+;
+; Installation
+;
+;   sudo install -m 0644 katpool-bridge.service /etc/systemd/system/
+;   sudo install -d -o root -g root -m 0755 /etc/systemd/system/katpool-bridge.service.d
+;   sudo systemctl daemon-reload
+;   sudo systemctl enable --now katpool-bridge
+;
+; Operator overrides go in
+;   /etc/systemd/system/katpool-bridge.service.d/*.conf
+; (see `katpool-bridge.conf.d/anti-abuse.conf.example` for the standard
+; anti-abuse tunables). Never edit this file in place on a deployed host.
+
+[Unit]
+Description=Katpool stratum bridge (kaspa-stratum-bridge)
+Documentation=https://github.com/Nacho-the-Kat/katpool
+Requires=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+
+; ----- Identity ------------------------------------------------------
+; A dedicated system user owns the process. Create with:
+;   sudo useradd --system --no-create-home --shell /usr/sbin/nologin katpool
+User=katpool
+Group=katpool
+
+; ----- Resource limits -----------------------------------------------
+; Stratum has one socket per ASIC; production farms reach ~5–10k
+; concurrent connections. 65,536 leaves comfortable headroom and is the
+; documented kernel default for `nofile`.
+LimitNOFILE=65536
+LimitNPROC=4096
+TasksMax=4096
+
+; ----- Restart policy ------------------------------------------------
+Restart=always
+RestartSec=3s
+
+; ----- Binary + working directory ------------------------------------
+; The binary path matches the cargo `[[bin]] name = "stratum-bridge"`
+; in `bridge/Cargo.toml`. Phase 7's release pipeline installs to
+; `/usr/local/bin/katpool-stratum-bridge`.
+ExecStart=/usr/local/bin/katpool-stratum-bridge --config /etc/katpool/config.yaml
+WorkingDirectory=/var/lib/katpool-bridge
+
+; Standard streams go to journald.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=katpool-bridge
+
+; ----- Filesystem hardening ------------------------------------------
+; Strict read-only world + minimal writable carve-outs. `StateDirectory`
+; auto-creates `/var/lib/katpool-bridge` owned by `katpool:katpool` and
+; adds it to the writable set; same for logs.
+StateDirectory=katpool-bridge
+StateDirectoryMode=0750
+LogsDirectory=katpool-bridge
+LogsDirectoryMode=0750
+ReadOnlyPaths=/etc/katpool
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateMounts=yes
+ProtectProc=invisible
+ProcSubset=pid
+
+; ----- Kernel hardening ----------------------------------------------
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+
+; ----- Capabilities --------------------------------------------------
+; Empty bounding set + ambient set: the process can never acquire any
+; capability, regardless of file caps on the binary. The bridge binds
+; to port 5555 by default, which is unprivileged.
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+
+; ----- Memory / execution --------------------------------------------
+; MemoryDenyWriteExecute=yes blocks W^X bypasses (common in JIT exploit
+; chains). Rust does not JIT, so this is a free win.
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+
+; ----- Network surface -----------------------------------------------
+; The bridge talks JSON-RPC over TCP/IPv4 + IPv6 and (in inprocess
+; mode) kaspad's gRPC. AF_UNIX is also kept for journald logging.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressDeny=any
+; The bridge listens on all interfaces and reaches out to the kaspad
+; node. Restrict outbound reach to the host's local subnets *and* the
+; kaspad endpoint via `IPAddressAllow=` overrides in the drop-in
+; directory; the default below is "deny all" so an operator must
+; explicitly opt every kaspad address in.
+IPAddressAllow=localhost
+
+; ----- Syscall filter ------------------------------------------------
+; @system-service is the documented baseline for long-running daemons;
+; we additionally subtract @resources/@privileged-process from belt-
+; and-braces.
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @raw-io @reboot @swap @cpu-emulation
+SystemCallErrorNumber=EPERM
+
+; ----- Misc ---------------------------------------------------------
+UMask=0077
+KeyringMode=private
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+
+[Install]
+WantedBy=multi-user.target

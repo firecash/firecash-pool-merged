@@ -1,0 +1,22 @@
+[package]
+name = "katpool-config"
+description = "Strongly-typed configuration loader with validation and sops decryption support"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+config = { workspace = true }
+validator = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

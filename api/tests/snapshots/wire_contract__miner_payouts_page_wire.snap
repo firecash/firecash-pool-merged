@@ -1,0 +1,28 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "address": "kaspa:qz4j8mu269z8llgcczmfukm9fan2fq822kzxu4cfukd5fqrhxpsv2zhs9jxnp",
+  "payouts": [
+    {
+      "id": 99,
+      "cycle_id": 7,
+      "kind": "nacho",
+      "amount": {
+        "sompi": "33000000",
+        "kas": "0.33"
+      },
+      "status": "confirmed",
+      "tx_hash": null,
+      "krc20_commit_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "krc20_reveal_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "planned_at": "2026-01-02T00:00:00Z",
+      "submitted_at": "2026-01-02T00:01:00Z",
+      "confirmed_at": "2026-01-02T00:10:00Z",
+      "failure_reason": null,
+      "nacho_amount": "500000000"
+    }
+  ],
+  "next_before": null
+}

@@ -1,0 +1,25 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "window_secs": 3600,
+  "entries": [
+    {
+      "rank": 1,
+      "address": "kaspa:qz4j8mu269z8llgcczmfukm9fan2fq822kzxu4cfukd5fqrhxpsv2zhs9jxnp",
+      "network": "mainnet",
+      "accepted_shares": 4096,
+      "hashrate_hs": 1200000000000.0,
+      "pool_share": 0.62
+    },
+    {
+      "rank": 2,
+      "address": "kaspa:qz4j8mu269z8llgcczmfukm9fan2fq822kzxu4cfukd5fqrhxpsv2zhs9jxnp",
+      "network": "mainnet",
+      "accepted_shares": 2048,
+      "hashrate_hs": 600000000000.0,
+      "pool_share": 0.31
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+# Typos configuration. Tuned for the project's domain vocabulary.
+#
+# `default.extend-words` is the safe place to whitelist anything
+# the typos default dictionary mistakes for a misspelling. Add
+# entries here ONLY when you're sure the word is intentional —
+# every false-positive entry chips away at the catcher's signal.
+#
+# Run `typos` locally to preview changes:
+#     cargo install --locked typos-cli
+#     typos
+
+[default.extend-words]
+# Kaspa's "Difficulty Adjustment Algorithm" score; the abbreviation
+# is pervasive in the codebase and the protocol docs.
+daa = "daa"
+Daa = "Daa"
+DAA = "DAA"
+
+# "UPnP" — typos doesn't parse the intra-camel-case correctly and
+# flags `Pn`. The systemd unit refers to the IETF UPnP protocol.
+Pn = "Pn"
+
+# Operations vocabulary: Recovery Time Objective. Stable English.
+RTO = "RTO"
+
+# Product name: HashiCorp.
+Hashi = "Hashi"
+
+# Proper noun: "PasingGrades" (pasinggrades.com), a Kaspa mining-pool
+# listicle referenced by name in the marketing strategy doc.
+Pasing = "Pasing"
+
+# Proper noun: "Groth16", the SNARK proving system by Jens Groth (2016).
+# Referenced in the Toccata blog post per KIP-16's Arkworks Groth16 precompile.
+Groth = "Groth"
+
+# Ordinal-date suffix ("2nd") in the dashboard's date formatter; the bare
+# 'nd' string literal is intentional English, not a typo for "and".
+nd = "nd"
+st = "st"
+th = "th"
+
+# Deliberately-malformed bool inputs in the vendored bridge `parse_bool`
+# tests (bridge/src/tests.rs) that assert these truncated strings are
+# rejected — upstream test fixtures, not typos.
+tru = "tru"
+fals = "fals"
+
+[files]
+# Don't lint generated lockfiles, the vendor tree, or test
+# fixtures that intentionally contain malformed data.
+extend-exclude = [
+    "Cargo.lock",
+    "bridge/Cargo.lock",
+    "bridge/fuzz/Cargo.lock",
+    "target/",
+]

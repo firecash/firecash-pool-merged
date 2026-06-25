@@ -1,0 +1,53 @@
+[package]
+name = "payout-kas"
+description = "KAS payout engine: daily batch payouts, storage-mass-aware, idempotent, with treasury custody hardening"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+# Remaining reserved deps land with later milestones (M4.7 runtime wiring
+# pulls in metrics/telemetry; M4.5 secrets is used at the signing boundary
+# in M4.6 via katpool-secrets directly). cargo-machete ignores the
+# not-yet-wired ones to keep the dep surface in workspace lockstep.
+[package.metadata.cargo-machete]
+ignored = [
+    "chrono",
+    "katpool-telemetry",
+    "secrecy",
+    "serde",
+]
+
+[dependencies]
+katpool-domain = { path = "../crates/katpool-domain" }
+katpool-db = { path = "../crates/katpool-db" }
+katpool-storagemass = { path = "../crates/katpool-storagemass" }
+katpool-idempotency = { path = "../crates/katpool-idempotency" }
+katpool-secrets = { path = "../crates/katpool-secrets" }
+katpool-metrics = { path = "../crates/katpool-metrics" }
+katpool-telemetry = { path = "../crates/katpool-telemetry" }
+kaspa-consensus-core = { workspace = true }
+kaspa-addresses = { workspace = true }
+kaspa-txscript = { workspace = true }
+kaspa-rpc-core = { workspace = true }
+kaspa-grpc-client = { workspace = true }
+secp256k1 = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+secrecy = { workspace = true }
+
+[dev-dependencies]
+testcontainers = { workspace = true }
+testcontainers-modules = { workspace = true }

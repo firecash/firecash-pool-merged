@@ -1,0 +1,24 @@
+[package]
+name = "katpool-metrics"
+description = "Prometheus registry helpers with bounded-cardinality discipline"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+# Scaffold crate — deps reserved for the Phase 7 metrics
+# registry helpers (bounded-cardinality wrappers around
+# prometheus). The accountant's M1 metric registration is
+# currently inline; the M3 work will fold it into this crate.
+[package.metadata.cargo-machete]
+ignored = ["prometheus", "tracing"]
+
+[dependencies]
+prometheus = { workspace = true }
+tracing = { workspace = true }

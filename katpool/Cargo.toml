@@ -1,0 +1,56 @@
+[package]
+name = "katpool"
+description = "Main wiring binary that composes the bridge, accountant, payout engines, and API into a single process"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+# Unified runtime binary. Composes the stratum bridge, the accountant
+# event consumer + maturity tracker, the KAS/KRC-20 payout engines, and
+# the read-only API into one process with a shared broadcast channel.
+# Telemetry (`katpool-telemetry`), treasury custody (`katpool-secrets`), the
+# YAML/TOML config layer (`katpool-config`), and payout/treasury metrics
+# (`katpool-metrics`, B7) are all wired.
+[package.metadata.cargo-machete]
+ignored = [
+    # Workspace deps the binary doesn't yet use.
+    "thiserror",
+]
+
+[[bin]]
+name = "katpool"
+path = "src/main.rs"
+
+[dependencies]
+katpool-config = { path = "../crates/katpool-config" }
+katpool-domain = { path = "../crates/katpool-domain" }
+katpool-db = { path = "../crates/katpool-db" }
+katpool-metrics = { path = "../crates/katpool-metrics" }
+katpool-telemetry = { path = "../crates/katpool-telemetry" }
+katpool-secrets = { path = "../crates/katpool-secrets" }
+accountant = { path = "../accountant" }
+payout-kas = { path = "../payout-kas" }
+payout-krc20 = { path = "../payout-krc20" }
+api = { path = "../api" }
+# Bridge — embedded as a library so the unified runtime can run
+# both the stratum server and the accountant in one process.
+kaspa-stratum-bridge = { path = "../bridge" }
+
+# Kaspad gRPC for the accountant's maturity tracker. Same node
+# the bridge talks to, but a separate client connection.
+kaspa-addresses = { workspace = true }
+kaspa-grpc-client = { workspace = true }
+kaspa-rpc-core = { workspace = true }
+
+tokio = { workspace = true, features = ["sync", "macros", "rt-multi-thread", "time", "signal"] }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde_json = { workspace = true }

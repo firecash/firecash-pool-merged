@@ -1,0 +1,46 @@
+# Alertmanager routing for katpool (B5).
+#
+# Alerts arrive from vmalert with a `severity` label (`page` | `warning`) and
+# are forwarded to ntfy via the ntfy-alertmanager bridge
+# (https://git.xenrox.net/~xenrox/ntfy-alertmanager). The bridge — not this
+# file — maps `severity` to ntfy priority/topic and holds the ntfy token, so no
+# secret lives here; the only secret referenced is the webhook password, read
+# from a mounted file. See README.md "Paging (ntfy)".
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: ntfy
+  # Collapse duplicates of the same alert across the (single) pool instance.
+  group_by: ["alertname", "network"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # Pages re-notify aggressively and group fast; the bridge raises ntfy
+    # priority off the same `severity=page` label.
+    - matchers:
+        - 'severity="page"'
+      receiver: ntfy
+      group_wait: 10s
+      repeat_interval: 1h
+
+receivers:
+  - name: ntfy
+    webhook_configs:
+      - url: "http://ntfy-alertmanager.railway.internal:8080"
+        send_resolved: true
+        http_config:
+          basic_auth:
+            username: alertmanager
+            password_file: /etc/alertmanager/secrets/webhook_password
+
+# A firing page suppresses the lower-severity warnings for the same alert so
+# on-call gets one signal, not two.
+inhibit_rules:
+  - source_matchers:
+      - 'severity="page"'
+    target_matchers:
+      - 'severity="warning"'
+    equal: ["alertname", "network"]

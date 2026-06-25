@@ -1,0 +1,9 @@
+---
+source: api/tests/wire_contract.rs
+expression: "FullRebateResponse\n{ address: ADDR.to_owned(), tier: Some(\"elite\"), full_rebate: true, }"
+---
+{
+  "address": "kaspa:qz4j8mu269z8llgcczmfukm9fan2fq822kzxu4cfukd5fqrhxpsv2zhs9jxnp",
+  "tier": "elite",
+  "full_rebate": true
+}

@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 4addb3815b710b3d68ec8ee7f5e4864ee4c7c796c66d6625070a0fb82073c936 # shrinks to gross = 9607679205057059, cfg = FeeConfig { topline_bps: 960 }, tier = Standard
+cc a777cec198bfb4b3b825d8e6c0e51e370c36fe197ac50154a2b07f18542b4f65 # shrinks to gross = 0, bps_a = 938, delta = 63, tier = Standard
+cc 0595d3c599e0807d094ce8f8e73abf44bbfe71e56bc6015e767f7ae4afe38dbf # shrinks to gross = 9260413691621261, cfg = FeeConfig { topline_bps: 996 }
+cc b1133ec2073c05c499c922b559bcd8a23a59810a2201df0fe0613dc01466ee61 # shrinks to gross = 9279046314743236, cfg = FeeConfig { topline_bps: 994 }

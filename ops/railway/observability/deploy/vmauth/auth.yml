@@ -1,0 +1,40 @@
+# vmauth ingress for the public observability write paths (B4). VictoriaMetrics,
+# Loki, and Tempo all stay private and unauthenticated on the Railway network;
+# vmauth is the ONLY component with a public domain and it proxies just the
+# ingestion endpoints after basic auth. `%{ENV}` placeholders are substituted by
+# vmauth from the service env (docs.victoriametrics.com/vmauth) so the
+# credentials live in Railway variables, not in this file.
+#
+# The netcup origin cannot reach *.railway.internal, and neither Loki
+# (auth_enabled:false) nor Tempo ships its own auth, so every origin agent
+# (vmagent for metrics, Alloy for logs+traces) egresses through here:
+#   /api/v1/write , /api/v1/import     -> VictoriaMetrics  (Prometheus remote-write)
+#   /loki/api/v1/push                  -> Loki             (log push)
+#   /v1/traces                         -> Tempo            (OTLP/HTTP spans; gRPC
+#                                                           cannot traverse vmauth)
+
+# Unauthenticated callers can reach only the health endpoint (for Railway/uptime
+# probes); everything else requires the write credentials below.
+unauthorized_user:
+  url_map:
+    - src_paths:
+        - "/health"
+      url_prefix: "http://victoriametrics.railway.internal:8428/health"
+
+users:
+  # The origin agents authenticate with these and are routed to the three
+  # ingestion backends only. No query/admin access is exposed publicly.
+  - username: "%{VMAUTH_WRITE_USER}"
+    password: "%{VMAUTH_WRITE_PASSWORD}"
+    url_map:
+      - src_paths:
+          - "/api/v1/write"
+          - "/api/v1/import"
+          - "/api/v1/import/.+"
+        url_prefix: "http://victoriametrics.railway.internal:8428"
+      - src_paths:
+          - "/loki/api/v1/push"
+        url_prefix: "http://loki.railway.internal:3100"
+      - src_paths:
+          - "/v1/traces"
+        url_prefix: "http://tempo.railway.internal:4318"

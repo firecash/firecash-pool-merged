@@ -1,0 +1,102 @@
+; katpool.service.in — template for the unified katpool runtime (bridge +
+; accountant + payout engines in one process), rendered per network by
+; `scripts/deploy.sh`. Placeholders __NETWORK__ and __DEPLOY_DIR__ are
+; substituted at install time; the rendered unit is installed as
+; /etc/systemd/system/katpool-__NETWORK__.service.
+;
+; This replaces the earlier *transient* tn10 unit (created via systemd-run,
+; lost on reboot, config baked in). The per-network runtime config lives in
+; /etc/katpool/__NETWORK__.env (sourced from ops/env/<network>.env), so the
+; binary stays network-agnostic — the network is selected purely by the
+; kaspad endpoint and the kaspatest:/kaspa: address prefix at runtime.
+;
+; Never edit the installed copy in place; edit this template + re-run the
+; deploy script. Operator-specific overrides go in
+;   /etc/systemd/system/katpool-__NETWORK__.service.d/*.conf
+[Unit]
+Description=Katpool unified runtime (__NETWORK__)
+Documentation=https://github.com/Nacho-the-Kat/katpool
+Documentation=file:///root/katpool/docs/runbooks/09-deploy-and-rollback.md
+Requires=network-online.target
+After=network-online.target postgresql.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+; Runs as root to read the binary under /root/katpool-__NETWORK__ and any
+; treasury key material the host provisions. A dedicated unprivileged user
+; (with the binary moved off /root) is tracked as future hardening below.
+User=root
+Group=root
+
+; ----- Runtime configuration -----------------------------------------
+; All KATPOOL_*/KASPAD_* env lives here, version-controlled at
+; ops/env/__NETWORK__.env. Secrets (treasury key) are NOT in this file:
+; they are provisioned out of band (key path / systemd credential).
+EnvironmentFile=/etc/katpool/__NETWORK__.env
+
+; ----- Binary + working directory ------------------------------------
+WorkingDirectory=__DEPLOY_DIR__
+ExecStart=__DEPLOY_DIR__/katpool
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=katpool-__NETWORK__
+
+; ----- Restart policy ------------------------------------------------
+Restart=on-failure
+RestartSec=3s
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+
+; ----- Resource limits -----------------------------------------------
+; Stratum keeps one socket per ASIC; production farms reach ~5–10k
+; concurrent connections.
+LimitNOFILE=65536
+LimitNPROC=4096
+TasksMax=4096
+
+; ----- Hardening (conservative; safe for a root process in /root) -----
+; ProtectSystem=strict makes /usr, /boot and /etc read-only without
+; touching /root, so the binary under __DEPLOY_DIR__ still executes.
+ProtectSystem=strict
+ReadWritePaths=__DEPLOY_DIR__
+ReadOnlyPaths=/etc/katpool
+PrivateTmp=yes
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+; Stratum (inbound, public miners) + kaspad gRPC + Postgres (outbound) +
+; journald (AF_UNIX). No IPAddress filtering here so miner connections are
+; never silently dropped; add an IPAddressAllow/Deny drop-in if desired.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @raw-io @reboot @swap @cpu-emulation
+SystemCallErrorNumber=EPERM
+UMask=0077
+KeyringMode=private
+
+; ----- Deferred hardening (do via systemd-analyze once off /root) -----
+; ProtectHome=yes, a dedicated non-root User=, and MemoryDenyWriteExecute
+; are intentionally omitted: the binary currently lives under /root and the
+; toc3 dependency graph (RISC Zero) makes W^X assumptions unverified. Revisit
+; after moving the binary to /usr/local/bin or /opt and re-running
+; `systemd-analyze security katpool-__NETWORK__`.
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+---
+source: api/tests/wire_contract.rs
+expression: resp
+---
+{
+  "from": "2026-01-02T00:00:00Z",
+  "to": "2026-01-02T02:00:00Z",
+  "bucket": "1h",
+  "points": [
+    {
+      "bucket_start": "2026-01-02T00:00:00Z",
+      "hashrate_hs": 1000000000.0
+    },
+    {
+      "bucket_start": "2026-01-02T01:00:00Z",
+      "hashrate_hs": 2000000000.0
+    }
+  ]
+}
