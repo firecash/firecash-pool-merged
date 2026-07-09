@@ -50,7 +50,13 @@ const VARDIFF_MAX_ELAPSED_SECS_NO_SHARES: f64 = 90.0;
 const VARDIFF_MIN_SHARES: f64 = 3.0;
 const VARDIFF_LOWER_RATIO: f64 = 0.75; // below this => decrease diff
 const VARDIFF_UPPER_RATIO: f64 = 1.25; // above this => increase diff
-const VARDIFF_MAX_STEP_UP: f64 = 2.0; // max 2x per adjustment tick
+// Up-steps are allowed to be large so a grossly under-difficultied miner (e.g. a
+// multi-TH/s ASIC that connected at a low seed) converges to its correct share
+// difficulty in a few ticks instead of ~40 doublings. The step itself is the
+// self-damping sqrt(observed/expected), so a big cap does not overshoot — it just
+// stops var-diff from being uselessly slow (which, at a low seed, let the miner
+// flood shares and trip the anti-abuse frame limiter before it could adjust).
+const VARDIFF_MAX_STEP_UP: f64 = 128.0; // up to 128x per adjustment tick (sqrt-damped)
 const VARDIFF_MAX_STEP_DOWN: f64 = 0.5; // max -50% per adjustment tick
 
 fn vardiff_pow2_clamp_towards(current: f64, next: f64) -> f64 {

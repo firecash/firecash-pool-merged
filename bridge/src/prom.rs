@@ -579,12 +579,24 @@ async fn serve_http_loop(listener: tokio::net::TcpListener, mode: HttpMode) -> R
 
     loop {
         let (mut stream, _) = listener.accept().await?;
-        let mut buffer = [0; 8192];
-
-        if let Ok(n) = stream.read(&mut buffer).await {
-            let request = String::from_utf8_lossy(&buffer[..n]);
-            let _ = handle_http_request(stream, &request, &mode).await;
-        }
+        // Handle each connection on its own task. Previously the request was awaited
+        // inline, so the accept loop served exactly one connection at a time — a single
+        // slow or half-open socket (a browser preconnect, an nginx keep-alive probe)
+        // would block `accept()` and pile every other request into the listen backlog,
+        // which is what made the dashboard hang ~10s and often return nothing at all.
+        let mode = mode.clone();
+        tokio::spawn(async move {
+            let mut buffer = [0; 8192];
+            // Bound the read so a client that connects but never sends a complete
+            // request can't pin this task open indefinitely.
+            let read = tokio::time::timeout(std::time::Duration::from_secs(5), stream.read(&mut buffer)).await;
+            if let Ok(Ok(n)) = read
+                && n > 0
+            {
+                let request = String::from_utf8_lossy(&buffer[..n]);
+                let _ = handle_http_request(stream, &request, &mode).await;
+            }
+        });
     }
 }
 
