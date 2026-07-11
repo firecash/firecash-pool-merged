@@ -8,13 +8,12 @@ import { BlocksSummary } from "@/features/overview/blocks-summary";
 import { FirmwarePanel } from "@/features/firmware/firmware-panel";
 import { GeoPanel } from "@/features/geo/geo-panel";
 import { PayoutsSummary } from "@/features/overview/payouts-summary";
-import { LeaderboardTable } from "@/features/leaders/leaderboard-table";
 import { LiveBlockFeed } from "@/features/blocks/live-block-feed";
 import { HalvingModule } from "@/features/network/halving-module";
 
 export const metadata: Metadata = {
   description:
-    "Live Kaspa mining pool overview: real-time pool and network hashrate, active miners, blocks found, payouts and the miner leaderboard for katpool.",
+    "Live FireCash mining pool overview: real-time pool and network hashrate, active miners, blocks found, and payouts. Miner privacy: no per-miner or top-miner rankings.",
   alternates: { canonical: "/" },
 };
 
@@ -46,8 +45,6 @@ export default function OverviewPage() {
         <MinersPanel />
         <BlocksSummary />
       </div>
-
-      <LeaderboardTable limit={8} compact />
 
       <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
         <GeoPanel />

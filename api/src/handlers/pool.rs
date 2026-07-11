@@ -14,11 +14,11 @@ use crate::models::{
     ActiveMinersHistory, ActiveMinersPointView, ActiveSessionsView, BlockCounts, BlockView,
     BlocksPage, CycleDetailPage, CycleRecipientView, CycleView, CyclesPage, FirmwareBreakdown,
     FirmwareEntryView, GeoBreakdown, GeoEntryView, HashrateHistory, HashratePointView,
-    HashrateSnapshot, LeaderboardEntryView, LeaderboardResponse, MiningPoolStats, MpsBlock,
+    HashrateSnapshot, MiningPoolStats, MpsBlock,
     PayoutTotals, PoolRejectsResponse, PoolStats, RejectReasonCount, TreasuryView,
 };
 use crate::money::KasAmount;
-use crate::params::{self, LeaderboardParams, PageParams, RangeParams, WindowParams};
+use crate::params::{self, PageParams, RangeParams, WindowParams};
 use crate::state::AppState;
 
 /// `GET /api/v1/pool/stats` — headline pool figures over a sliding window.
@@ -281,45 +281,9 @@ pub async fn payout_cycle(
     .await
 }
 
-/// `GET /api/v1/pool/leaderboard` — top miners by window hashrate.
-// `pool_share` is a unitless ratio of summed difficulty (a rate-like
-// figure), not money; float division is the correct representation here.
-#[allow(clippy::float_arithmetic)]
-pub async fn leaderboard(
-    State(state): State<AppState>,
-    Query(lb_params): Query<LeaderboardParams>,
-) -> Result<Json<Arc<Value>>, ApiError> {
-    let (window, limit) = params::leaderboard(&lb_params)?;
-    let key = format!("pool/leaderboard?w={}&l={limit}", window.as_secs());
-    let cache = state.pool_cache.clone();
-    cached_json(&cache, key, async move {
-        let w = resolve_window(window);
-        let rows = share_stats::leaderboard(&state.pool, w.since, w.until, limit).await?;
-        let pool = share_stats::accepted_pool_wide(&state.pool, w.since).await?;
-        let pool_weight = pool.total_weight;
-        let entries = rows
-            .into_iter()
-            .enumerate()
-            .map(|(idx, e)| LeaderboardEntryView {
-                rank: idx as i64 + 1,
-                address: e.address,
-                network: e.network,
-                accepted_shares: e.accepted_shares,
-                hashrate_hs: e.hashrate_hs,
-                pool_share: if pool_weight > 0.0 {
-                    e.total_weight / pool_weight
-                } else {
-                    0.0
-                },
-            })
-            .collect();
-        to_value(&LeaderboardResponse {
-            window_secs: w.secs,
-            entries,
-        })
-    })
-    .await
-}
+// `GET /api/v1/pool/leaderboard` was intentionally REMOVED: FireCash does not
+// expose per-miner or top-miner rankings (address, hashrate, pool-share) — that
+// deanonymizes miners. Only aggregate pool figures are served. See `api::app`.
 
 /// `GET /api/v1/pool/miners/history` — active-miner count over time.
 pub async fn active_miners_history(

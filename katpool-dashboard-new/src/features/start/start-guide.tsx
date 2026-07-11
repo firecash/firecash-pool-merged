@@ -179,7 +179,7 @@ export function StartGuide() {
               </a>
             </Button>
             <Button asChild variant="outline" size="lg">
-              <Link href="/leaders">View leaderboard</Link>
+              <Link href="/">Pool overview</Link>
             </Button>
           </div>
         </div>
@@ -212,9 +212,8 @@ export function StartGuide() {
           <a href="#connect">below</a>.
         </Step>
         <Step n={3} icon={LineChart} title="Watch it live">
-          Your rig appears within a minute. Paste your address into the search bar at the top — or
-          find it on the <Link href="/leaders">leaderboard</Link> — to follow hashrate, workers,
-          shares, balance and payouts in real time.
+          Your rig appears within a minute. Paste your address into the search bar at the top to
+          follow hashrate, workers, shares, balance and payouts in real time.
         </Step>
       </div>
 

@@ -85,7 +85,9 @@ pub fn app(state: AppState) -> Router {
             "/pool/payouts/{cycle_id}",
             get(handlers::pool::payout_cycle),
         )
-        .route("/pool/leaderboard", get(handlers::pool::leaderboard))
+        // NOTE: /pool/leaderboard (top-miner ranking) is intentionally removed —
+        // FireCash does not expose per-miner or top-miner stats (miner privacy).
+        // Only aggregate pool figures are served.
         .route(
             "/pool/miners/history",
             get(handlers::pool::active_miners_history),

@@ -3,7 +3,6 @@ import {
   Blocks,
   LayoutDashboard,
   Pickaxe,
-  Trophy,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -25,6 +24,5 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/blocks", label: "Blocks", icon: Blocks },
   { href: "/payouts", label: "Payouts", icon: Wallet },
-  { href: "/leaders", label: "Leaderboard", shortLabel: "Leaders", icon: Trophy },
   { href: "/status", label: "Status", icon: Activity },
 ];

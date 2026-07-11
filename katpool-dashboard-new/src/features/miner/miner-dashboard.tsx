@@ -50,7 +50,7 @@ export function MinerDashboard({ address }: { address: string }) {
             </p>
           </div>
           <Button asChild variant="outline">
-            <Link href="/leaders">Back to leaderboard</Link>
+            <Link href="/">Back to overview</Link>
           </Button>
         </Card>
       );

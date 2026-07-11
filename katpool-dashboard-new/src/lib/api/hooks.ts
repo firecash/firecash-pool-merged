@@ -15,7 +15,6 @@ import type {
   PoolRejectsResponse,
   FullRebateResponse,
   HashrateHistory,
-  LeaderboardResponse,
   MinerPayoutsPage,
   MinerProfile,
   NetworkContext,
@@ -87,13 +86,7 @@ export function useActiveMinersHistory(args: RangeArgs) {
   );
 }
 
-export function useLeaderboard(windowSecs?: number, limit?: number) {
-  return useBff<LeaderboardResponse>(
-    ["pool", "leaderboard", windowSecs ?? null, limit ?? null],
-    bffUrl("/api/v1/pool/leaderboard", { window: windowSecs, limit }),
-    LIVE_MS,
-  );
-}
+// useLeaderboard removed — FireCash does not expose per-miner/top-miner rankings.
 
 export function useFirmware(windowSecs?: number) {
   return useBff<FirmwareBreakdown>(

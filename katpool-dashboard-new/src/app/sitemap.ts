@@ -11,7 +11,6 @@ const ROUTES: { path: string; priority: number; changeFrequency: MetadataRoute.S
   { path: "/start", priority: 0.9, changeFrequency: "monthly" },
   { path: "/blocks", priority: 0.8, changeFrequency: "hourly" },
   { path: "/payouts", priority: 0.8, changeFrequency: "hourly" },
-  { path: "/leaders", priority: 0.7, changeFrequency: "hourly" },
   { path: "/status", priority: 0.5, changeFrequency: "hourly" },
 ];
 

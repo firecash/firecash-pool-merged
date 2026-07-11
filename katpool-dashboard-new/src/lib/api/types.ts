@@ -150,19 +150,8 @@ export interface CycleDetailPage {
   recipients: CycleRecipientView[];
 }
 
-export interface LeaderboardEntryView {
-  rank: number;
-  address: string;
-  network: string;
-  accepted_shares: number;
-  hashrate_hs: number;
-  pool_share: number;
-}
-
-export interface LeaderboardResponse {
-  window_secs: number;
-  entries: LeaderboardEntryView[];
-}
+// LeaderboardEntryView / LeaderboardResponse removed — FireCash exposes no
+// per-miner or top-miner rankings (miner privacy).
 
 export interface ActiveMinersPointView {
   bucket_start: string;
