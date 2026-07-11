@@ -67,6 +67,7 @@ pub mod metrics;
 pub mod replay;
 pub mod tier;
 pub mod tier_kasplex;
+pub mod vesting;
 pub mod window;
 
 pub use allocation::{AllocationEngine, AllocationEngineError, AllocationOutcome};
@@ -76,6 +77,10 @@ pub use config::{
 };
 pub use consumer::{ConsumerConfig, ConsumerConfigError, EventConsumer, VALID_NETWORKS};
 pub use error::{AccountantError, EventError};
+pub use vesting::{
+    ClaimTotals, EARLY_PAYOUT_BPS, FULL_PAYOUT_BPS, ForfeitPolicy, VESTING_CLIFF,
+    VESTING_CLIFF_DAYS, VestedSplit, vest_claim, vest_reward,
+};
 pub use geoip::{GeoIp, GeoIpError};
 pub use kaspad_grpc::{KaspadGrpcClient, coinbase_utxos_from_entries};
 pub use maturity::{
