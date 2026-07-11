@@ -1,68 +1,80 @@
-# katpool
+# firecash-pool
 
-[![CI](https://github.com/Nacho-the-Kat/katpool/actions/workflows/ci.yml/badge.svg)](https://github.com/Nacho-the-Kat/katpool/actions/workflows/ci.yml)
 [![License: MIT or Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
-[![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](rust-toolchain.toml)
+[![Rust 1.91+](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](Cargo.toml)
 
-Rust-first Kaspa mining pool. A single-binary deployment that owns
-stratum, share validation, block submission, accounting, KAS payouts, and
-native-Rust KRC-20 NACHO rebates — backed by `PostgreSQL`, fronted by
-Railway TCP edges, and observed by a self-hosted Grafana LGTM stack.
+Rust-first **[FireCash](https://github.com/firecash/firecash-rusty)** mining pool — a
+fork of [Nacho-the-Kat/katpool](https://github.com/Nacho-the-Kat/katpool) retargeted at
+the shielded-by-default FireCash chain. A single-binary deployment that owns stratum,
+share validation, block submission (native **and** AuxPoW merged mining), PROP
+accounting, and **shielded `$firecash` payouts** — backed by `PostgreSQL`.
+
+Because FireCash's PoW is kHeavyHash (byte-identical to Kaspa), the stratum/mining path
+is unchanged from a Kaspa pool. What is different is **payout**: FireCash has no
+transparent UTXOs — the coinbase reward is minted as an Orchard shielded note — so the
+pool holds a **shielded treasury** and miners **claim** their balance (see below).
+
+> The internal crate and binary names are still `katpool` / `katpool-*`, inherited from
+> the upstream fork; they are not renamed to avoid churning 60+ patched `kaspa-*` deps.
+> The product is FireCash; the binary you build is `katpool`.
 
 ## Status
 
-> **Live on mainnet.** The Rust pool at `kas.katpool.com` runs stratum,
-> accounting, KAS payouts, and NACHO rebates. Architecture is in
-> [`docs/architecture.md`](docs/architecture.md); phase history and
-> remaining hardening work are in [`docs/roadmap.md`](docs/roadmap.md).
+> **Under construction.** The stratum **bridge** connects to a FireCash node and mines
+> native + AuxPoW solutions today. The **shielded payout path is being built** (shielded
+> treasury → PROP accounting → cliff vesting → signature-authenticated claim), replacing
+> the upstream transparent-KAS/KRC-20 payout engines, which do **not** apply to FireCash.
+> Do not run this pool for real payouts until the shielded claim path lands.
 
 ## At a glance
 
-**Runtime** (what `cargo build --bin katpool` ships):
+**Runtime** (what `cargo build --release --bin katpool` ships):
 
 | Component | Responsibility |
 |---|---|
-| [`bridge/`](bridge/) | Fork of `rusty-kaspa` v1.1.0 in-house stratum bridge. Accepts ASIC stratum, validates shares, submits blocks. Phase 1. |
-| [`accountant/`](accountant/) | Subscribes to share + block events, computes PROP allocations, writes balances. Phase 3. |
-| [`payout-kas/`](payout-kas/) | Daily KAS payouts; storage-mass-aware via KIP-9/KIP-13; idempotent across restarts. Phase 4. |
-| [`payout-krc20/`](payout-krc20/) | Native Rust KRC-20 commit/reveal for NACHO rebate distribution. Phase 5. |
-| [`api/`](api/) | Read-only `axum` HTTP API (`/health`, `/balance`, `/api/pool/*`). Phase 6. |
-| [`katpool/`](katpool/) | Main wiring binary that runs all of the above in one process. |
+| [`bridge/`](bridge/) | Forked `rusty-kaspa` stratum bridge. Accepts ASIC stratum, validates shares, submits native + AuxPoW blocks to a FireCash node. **Works today.** |
+| [`accountant/`](accountant/) | Subscribes to share + block events, computes PROP allocations, writes per-miner balances. |
+| [`payout-kas/`](payout-kas/) | **Upstream transparent-KAS payout — NOT used by FireCash** (no transparent UTXOs). Being replaced by the shielded treasury payout. |
+| [`payout-krc20/`](payout-krc20/) | **Upstream NACHO KRC-20 rebate — not applicable to FireCash.** |
+| [`api/`](api/) | Read-only `axum` HTTP API. Serves **aggregate** pool stats only; per-miner stats are withheld for miner privacy. |
+| [`katpool/`](katpool/) | Main wiring binary that runs the active components in one process. |
 | [`crates/`](crates/) | Shared libraries: `katpool-domain`, `-db`, `-config`, `-metrics`, `-storagemass`, `-idempotency`, `-telemetry`, `-secrets`, `-fault-injection`. |
 
-**Frontends** (deploy separately on Railway): `katpool-dashboard-new/`,
-`katpool-landing-new/`.
+## Payout model (FireCash)
 
-## Architecture
+FireCash payouts are **shielded and custodial-until-claim**:
 
-See [`docs/architecture.md`](docs/architecture.md) for the full diagram and
-rationale. In short:
+- The pool mines to its **own shielded (`$firecash`) address** and tracks each miner's
+  PROP balance in Postgres, keyed by the miner's payout shielded address.
+- **Cliff vesting, per block reward.** Claiming a reward **before 10 days pays 50%**;
+  **at or after 10 days pays 100%**. The withheld 50% on an early claim goes to the pool
+  operator treasury (configurable).
+- **Claim = shielded signature.** To claim, a miner requests a challenge and signs it
+  with their shielded address key (the same sign/verify as `shielded-pay`); the pool
+  verifies against the payout address and sends the vested balance as a shielded payment.
+  No mining password is required — the signature is the security boundary.
+
+## Connecting a miner
+
+FireCash mining is ordinary kHeavyHash — point any Kaspa-style miner/ASIC at the pool's
+stratum port with your `firecash:` payout address as the username:
 
 ```
-ASIC miners
-   |  stratum TCP
-   v
-Railway TCP edge (3 regions, anycast-style failover)
-   |  WireGuard / public
-   v
-NetCup VPS  ──  one katpool process  ──  PostgreSQL 17
-                  bridge / accountant            |
-                  payout-kas / payout-krc20      v
-                  api / embedded kaspad        backups → Backblaze B2
-   |  vmagent OTLP + push
-   v
-Railway: self-hosted Grafana + Loki + Tempo + Alertmanager + Blackbox
-         Exporter + GlitchTip + Uptime Kuma + ntfy + canary miner
+stratum+tcp://<pool-host>:<port>   user=firecash:<your-address>   pass=x
 ```
+
+(The password field is unused; `x` or empty is fine.) See [`help.txt`](help.txt) for the
+full operator guide, native vs. AuxPoW merged mining, and node setup.
 
 ## Quick start (development)
 
-Prerequisites: Rust 1.88+ (pinned via [`rust-toolchain.toml`](rust-toolchain.toml)),
-Docker (for ephemeral test databases), and `cargo-deny` / `cargo-audit`.
+Prerequisites: Rust 1.91+ / edition 2024 (pinned via `rust-version` in
+[`Cargo.toml`](Cargo.toml)), Docker (for ephemeral test databases), and
+`cargo-deny` / `cargo-audit`.
 
 ```bash
-git clone https://github.com/Nacho-the-Kat/katpool.git
-cd katpool
+git clone https://github.com/firecash/firecash-pool.git
+cd firecash-pool
 
 # Verify your environment matches CI gates
 cargo fmt --all --check
@@ -70,49 +82,31 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo deny check
 
-# Run the wiring binary (Phase 0 stub prints linked crate versions)
+# Build / run the wiring binary
 cargo run --release --bin katpool
 ```
 
-Full onboarding instructions for new developers (including secret
-provisioning, OS hardening for treasury custody, and the local
-PostgreSQL setup) are in [`docs/onboarding.md`](docs/onboarding.md).
+You also need a reachable FireCash node (`kaspad`) with `--utxoindex`. See
+[`help.txt`](help.txt) §3 for node setup and the stratum bridge config
+([`firecash-bridge.yaml`](firecash-bridge.yaml)).
 
 ## Operating principles
 
-- **Determinism**: every reward, mass, and payout calculation is a pure
-  function tested with `proptest`. No floating-point money math.
-- **Zero plaintext secrets**: treasury key only ever exists sops-encrypted
-  on disk; loaded via systemd `LoadCredentialEncrypted`, mlocked, zeroized
-  on drop.
-- **Idempotent payouts**: every outbound transaction records an idempotency
-  key in the DB *before* signing. Mid-cycle restarts cannot double-pay.
-- **Pinned everything**: Rust toolchain, container images, and crate
-  versions are pinned. Floating tags are CI-rejected.
-- **Test pyramid**: unit + property + fuzz + integration + replay-from-prod
-  + chaos + load + shadow + DR validation. Every layer is a gate.
+- **Determinism**: every reward, mass, and payout calculation is a pure function tested
+  with `proptest`. No floating-point money math.
+- **Zero plaintext secrets**: the treasury key only ever exists encrypted on disk;
+  loaded via systemd `LoadCredentialEncrypted`, mlocked, zeroized on drop.
+- **Idempotent payouts**: every outbound transaction records an idempotency key in the DB
+  *before* signing. Mid-cycle restarts cannot double-pay.
+- **Miner privacy**: the pool does not publish per-miner or top-miner leaderboards; only
+  aggregate stats are exposed.
+- **Pinned everything**: Rust toolchain, container images, and crate versions are pinned.
 
 ## Documentation
 
-Start at [`docs/README.md`](docs/README.md) for the full index. Highlights:
-
-| Path | Topic |
-|---|---|
-| [`docs/architecture.md`](docs/architecture.md) | Component layout, data flow, deployment topology |
-| [`docs/threat-model.md`](docs/threat-model.md) | STRIDE-style threat model and mitigations |
-| [`docs/custody.md`](docs/custody.md) | Treasury custody design (sops/age + OS isolation) |
-| [`docs/kips.md`](docs/kips.md) | KIP-9 and KIP-13 implementation notes |
-| [`docs/capacity-plan.md`](docs/capacity-plan.md) | Sizing and capacity baselines |
-| [`docs/cutover-plan.md`](docs/cutover-plan.md) | Production cutover and rollback procedure |
-| [`docs/onboarding.md`](docs/onboarding.md) | Developer onboarding |
-| [`docs/dev-workflow.md`](docs/dev-workflow.md) | Local-gate ritual, stacked-PR rules, label conventions |
-| [`docs/db-schema.md`](docs/db-schema.md) | Database schema reference (operator-facing) |
-| [`docs/roadmap.md`](docs/roadmap.md) | Phase status and remaining hardening |
-| [`docs/decisions/`](docs/decisions/) | Architectural Decision Records (MADR 4.0) |
-| [`docs/runbooks/`](docs/runbooks/) | One runbook per incident class |
-| [`archives/`](archives/) | Retired handoffs and one-shot audits (not live docs) |
-| [`SECURITY.md`](SECURITY.md) | Vulnerability disclosure policy |
-| [`CHANGELOG.md`](CHANGELOG.md) | Release history (Keep a Changelog format) |
+Start at [`docs/README.md`](docs/README.md) for the index and [`help.txt`](help.txt) for
+the operator guide. Some `docs/` pages still carry upstream (Kaspa/KRC-20) specifics and
+are being migrated to FireCash.
 
 ## License
 
@@ -125,7 +119,6 @@ at your option.
 
 ### Contribution
 
-Unless you explicitly state otherwise, any contribution intentionally
-submitted for inclusion in the work by you, as defined in the Apache-2.0
-license, shall be dual-licensed as above, without any additional terms or
-conditions.
+Unless you explicitly state otherwise, any contribution intentionally submitted for
+inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual-licensed as above, without any additional terms or conditions.

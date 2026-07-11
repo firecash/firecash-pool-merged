@@ -1,5 +1,5 @@
 ===============================================================================
- FireCash (FC) — Mining Pool Operator Guide
+ FireCash ($firecash) — Mining Pool Operator Guide
 ===============================================================================
 
 This document explains what the FireCash chain is, how to point an existing
@@ -20,8 +20,10 @@ a kHeavyHash (Kaspa) pool and want to add FireCash.
   - Proof of Work: kHeavyHash, BYTE-IDENTICAL to Kaspa mainnet. The PoW files
     are an untouched fork, so any Kaspa miner / ASIC / hashing library that
     solves Kaspa headers solves FireCash headers with zero changes.
-  - Target block rate: 10 BPS. Coinbase emission: 44 FC per block (at 10 BPS),
-    i.e. 4.4e9 sompi/block (1 FC = 1e8 sompi). Ticker: FC.
+  - Target block rate: 1 BPS. Coinbase emission: 60 $firecash per block (at 1 BPS),
+    i.e. 6e9 sompi/block (1 $firecash = 1e8 sompi). The initial reward halves every
+    3 months, caught by a two-step perpetual tail (6 -> 3 $firecash/block). Ticker:
+    $firecash.
   - Address format: bech32 with HRP "firecash:" (mainnet), e.g.
     firecash:pyfjy228...  (testnet "firecashtest:", devnet "firecashdev:",
     simnet "firecashsim:"). Network id / datadir name: "firecash-mainnet".
@@ -88,17 +90,21 @@ This path is fully live and is what the network runs on.
  4. MERGED-MINING ACTIVATION TIMELINE (before / after)
 -------------------------------------------------------------------------------
 
-Merged mining is gated by a consensus fork activation keyed on DAA score:
+Consensus supports GATING merged mining behind a fork activation keyed on DAA
+score. The mechanism is a `ForkActivation`: before the activation score only
+native solutions are accepted; at/after it, both native and AuxPoW are accepted.
 
-    MAINNET activation: DAA score 12,096,000  (= day 14 at 10 BPS)
-    testnet / devnet / simnet: active from genesis (always)
+    CURRENT live network: merged mining is active from GENESIS
+                          (merged_mining_activation = always).
+    A production relaunch MAY instead gate it to a DAA score (e.g. a ~2-week
+    delay = 1,209,600 DAA at 1 BPS), flipping to the BEFORE/AFTER behaviour below.
 
-  BEFORE activation (mainnet DAA < 12,096,000):
+  BEFORE activation (if gated):
       - ONLY native solutions (type A) are accepted.
       - AuxPoW proofs on a header are ignored for PoW purposes.
       - Every pool mines FireCash natively. Nothing to configure.
 
-  AFTER activation (mainnet DAA >= 12,096,000):
+  AT/AFTER activation (and on the current always-on network):
       - BOTH native (A) and AuxPoW (B) solutions are accepted.
       - Pools MAY switch to merged mining with Kaspa, or keep mining natively —
         both remain valid forever. There is no flag day for miners; native is
@@ -211,8 +217,10 @@ This reference pool (fork of Nacho-the-Kat/katpool) ships an opt-in merged path:
 
   - Want to mine FireCash today?  Run a FireCash node + your Kaspa-style bridge.
     It's kHeavyHash — nothing special. Native solutions are always valid.
-  - After mainnet DAA 12,096,000, you MAY additionally submit merged (AuxPoW)
-    solutions built on a Kaspa parent; native keeps working unchanged.
+  - On the current network merged mining is active from genesis, so you MAY
+    additionally submit merged (AuxPoW) solutions built on a Kaspa parent; native
+    keeps working unchanged. (If a future relaunch gates it to a DAA score, aux is
+    accepted only at/after that score.)
   - For real Kaspa+FireCash dual rewards you must feed a real Kaspa template and
     submit winning parents to both chains (section 6 caveat).
 ===============================================================================
