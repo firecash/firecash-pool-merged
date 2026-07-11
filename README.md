@@ -46,13 +46,21 @@ FireCash payouts are **shielded and custodial-until-claim**:
 
 - The pool mines to its **own shielded (`$firecash`) address** and tracks each miner's
   PROP balance in Postgres, keyed by the miner's payout shielded address.
-- **Cliff vesting, per block reward.** Claiming a reward **before 10 days pays 50%**;
-  **at or after 10 days pays 100%**. The withheld 50% on an early claim goes to the pool
-  operator treasury (configurable).
-- **Claim = shielded signature.** To claim, a miner requests a challenge and signs it
-  with their shielded address key (the same sign/verify as `shielded-pay`); the pool
-  verifies against the payout address and sends the vested balance as a shielded payment.
-  No mining password is required — the signature is the security boundary.
+- **Cliff vesting, per block reward.** Each reward vests on a 10-day cliff: **before 10
+  days it pays 50%, at or after 10 days it pays 100%.** The withheld 50% on an early
+  claim goes to the pool operator treasury (configurable).
+- **After 10 days: auto-sent, no action needed.** A scheduled sweep pays every reward
+  that has passed the cliff to the miner's `firecash:` address at 100% — **no signature,
+  no claim, nothing for the miner to do.**
+- **Before 10 days: signed early claim (optional).** A miner who wants their balance
+  *early* requests a challenge and signs it with their shielded address key (the same
+  sign/verify as `shielded-pay`); the pool verifies against the payout address and sends
+  the vested balance (matured rewards at 100%, still-vesting at 50%). **Signing is only
+  ever needed to claim early** — it is a choice to trade 50% for speed, never a
+  requirement to get paid. No mining password is required.
+
+See `accountant/src/payout.rs` (the `AutoSweep` vs `SignedClaim` triggers) and
+`accountant/src/vesting.rs` (the split) for the exact policy.
 
 ## Connecting a miner
 
