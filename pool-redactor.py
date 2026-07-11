@@ -56,33 +56,26 @@ def blocks_by_wallet():
 
 
 def redact(stats, bbw):
-    out = {
+    """Public pool feed — AGGREGATE ONLY. On a shielded chain, per-miner/top-miner
+    stats are a privacy leak even with masked addresses (they rank who mines how
+    much), so this exposes no per-worker rows and no block attribution. A miner sees
+    their OWN stats via /api/miner (self-lookup by exact address; no enumeration)."""
+    workers = stats.get("workers") or []
+    pool_hashrate_hs = sum((w.get("hashrate") or 0) for w in workers) * 1e9  # GH/s -> H/s
+    return {
         "networkHashrate": stats.get("networkHashrate"),
         "networkBlockCount": stats.get("networkBlockCount"),
         "networkDifficulty": stats.get("networkDifficulty"),
-        "activeWorkers": stats.get("activeWorkers"),
+        "activeWorkers": stats.get("activeWorkers") or len(workers),
+        "poolHashrate": pool_hashrate_hs,
         "totalBlocks": stats.get("totalBlocks"),
         "blocksAccepted": sum(v["found"] for v in bbw.values()),
         "totalShares": stats.get("totalShares"),
         "bridgeUptime": stats.get("bridgeUptime"),
-        "workers": [],
-        "blocks": [],
+        # Recent blocks carry NO wallet/worker attribution.
+        "blocks": [{"hash": b.get("hash"), "timestamp": b.get("timestamp")}
+                   for b in (stats.get("blocks") or [])[:20]],
     }
-    for w in stats.get("workers") or []:
-        out["workers"].append({
-            "worker": w.get("worker") or "—",
-            "wallet": mask_addr(w.get("wallet")),
-            "hashrate": w.get("hashrate"),
-            "shares": w.get("shares"),
-        })
-    for b in (stats.get("blocks") or [])[:20]:
-        out["blocks"].append({
-            "worker": b.get("worker") or "—",
-            "wallet": mask_addr(b.get("wallet")),
-            "hash": b.get("hash"),
-            "timestamp": b.get("timestamp"),
-        })
-    return out
 
 
 def miner(address, stats, bbw):
