@@ -669,9 +669,13 @@ impl ShareHandler {
                 format!("check_passed={}, pow_value={:x}", check_passed, pow_value)
             );
 
-            // Calculate network target from header.bits (debug/diagnostic only).
+            // Calculate the block-found target. In real merged mining the parent carries
+            // the (hard) Kaspa target in header.bits, but FireCash aux blocks must be found
+            // at the FireCash (easier) cadence — so use the FireCash target when merged,
+            // falling back to the parent's own bits otherwise.
             use crate::hasher::calculate_target;
-            let network_target = calculate_target(header_clone.bits as u64);
+            let network_target =
+                kaspa_api.merged_fc_target(&current_job.block).unwrap_or_else(|| calculate_target(header_clone.bits as u64));
 
             // Check if pow_value meets network target (lower hash is better)
             let meets_network_target = pow_value <= network_target;
@@ -1840,6 +1844,13 @@ pub trait KaspaApiTrait: Send + Sync {
     ) -> Result<Vec<(String, u64)>, Box<dyn std::error::Error + Send + Sync>>;
 
     async fn get_current_block_color(&self, block_hash: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Real merged mining: the FireCash (easier) block-found target for a given parent,
+    /// or `None` when not merged / the parent is unknown (caller then uses the parent's
+    /// own `header.bits`). Default `None` keeps non-KaspaApi impls (mocks) unaffected.
+    fn merged_fc_target(&self, _parent_block: &Block) -> Option<num_bigint::BigUint> {
+        None
+    }
 }
 
 #[cfg(test)]

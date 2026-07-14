@@ -64,3 +64,6 @@ rust-toolchain.toml.orig
 firecash-merged.yaml
 bin/
 *.log
+
+# local dev: path override to firecash-rusty checkout (not for CI/others)
+.cargo/

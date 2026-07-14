@@ -30,6 +30,16 @@ pub struct InstanceConfig {
 #[serde(default)]
 pub struct GlobalConfig {
     pub kaspad_address: String,
+    /// Merged mining (real dual-chain): gRPC address of the upstream **Kaspa** node
+    /// that supplies the parent block template and receives Kaspa-target-clearing
+    /// blocks. Empty disables real merged mining. Overridable via
+    /// `FIRECASH_KASPA_NODE`.
+    #[serde(default)]
+    pub merged_kaspa_address: String,
+    /// The `kaspa:` address every merged parent's coinbase pays (the KAS reward
+    /// recipient). Overridable via `FIRECASH_KASPA_PAY`.
+    #[serde(default)]
+    pub merged_kaspa_pay_address: String,
     #[serde(deserialize_with = "deserialize_duration_ms", serialize_with = "serialize_duration_ms")]
     pub block_wait_time: Duration,
     pub print_stats: bool,
@@ -190,6 +200,8 @@ impl Default for GlobalConfig {
     fn default() -> Self {
         Self {
             kaspad_address: "localhost:16110".to_string(),
+            merged_kaspa_address: String::new(),
+            merged_kaspa_pay_address: String::new(),
             block_wait_time: Duration::from_millis(1000),
             print_stats: true,
             log_to_file: true,

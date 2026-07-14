@@ -33,6 +33,7 @@ katpool-domain = { path = "../crates/katpool-domain" }
 # Kaspa dependencies - using workspace versions
 kaspa-consensus-core = { workspace = true }
 kaspa-hashes = { workspace = true }
+kaspa-merkle = { workspace = true }
 kaspa-math = { workspace = true }
 kaspa-pow = { workspace = true }
 kaspa-addresses = { workspace = true }
