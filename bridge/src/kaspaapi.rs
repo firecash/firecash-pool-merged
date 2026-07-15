@@ -473,8 +473,16 @@ impl KaspaApi {
                 }
             };
 
-            // Record network stats
-            record_network_stats(hashrate_response.network_hashes_per_second, dag_response.block_count, dag_response.difficulty);
+            // Record network stats. The dashboard labels this the chain "Block height", so
+            // it must be the virtual DAA score (the height users and the explorer see), NOT
+            // `block_count` — on a pruned node block_count is only the retained-block tally
+            // (~115K here) and reads as a stale/wrong height while the chain is actually at
+            // DAA ~334K.
+            record_network_stats(
+                hashrate_response.network_hashes_per_second,
+                dag_response.virtual_daa_score,
+                dag_response.difficulty,
+            );
         }
     }
 

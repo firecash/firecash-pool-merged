@@ -10,6 +10,29 @@ backward-incompatible ways at every minor bump.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Dashboard "Block height" showed a stale/low value** (~115K while the chain
+  was at DAA ~334K). The bridge reported `GetBlockDagInfo.block_count` (the
+  retained-block tally on a pruned node) as the network height; it now reports
+  `virtual_daa_score` — the true chain height users and the explorer see
+  (`bridge/src/kaspaapi.rs`).
+
+### Changed / verified
+
+- **Real dual-chain merged mining tested live (2026-07-15).** Enabled via
+  `ZKAS_MERGED_MINING=1` + `ZKAS_KASPA_NODE` + `ZKAS_KASPA_PAY`: the bridge pulls
+  a real Kaspa parent template, embeds `FCMM||H_fc`, and submits solved parents
+  to both Kaspa (KAS) and ZKas (aux). Verified: ZKas blocks accepted by the node
+  in merged mode; graceful fallback to synthetic parent (ZKas-only) while the
+  Kaspa node is still in IBD. Docs updated (`help.txt` §6, §9).
+- **Consensus (node) fix consumed via the rusty-kaspa fork:**
+  `is_shielded_anchor_final` panicked (`.unwrap()` on a pruned anchor-source
+  block's blue score), freezing the virtual processor once pruning advanced past
+  a live anchor's source. Pool operators running a node MUST take the patched
+  node build — the pre-fix node crash-loops and stops accepting blocks. A pruned
+  source is now treated as finalized/canonical instead of panicking.
+
 ### Removed
 
 - **Cutover one-shot tools** (`katpool-import-legacy`, `katpool-replay`,

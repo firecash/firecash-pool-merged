@@ -164,12 +164,17 @@ Binding chain (what the verifier walks):
  6. WIRING MERGED MINING IN THIS POOL
 -------------------------------------------------------------------------------
 
-This reference pool (fork of Nacho-the-Kat/katpool) ships an opt-in merged path:
+This reference pool (fork of Nacho-the-Kat/katpool) ships an opt-in merged path,
+configured entirely by environment variables on the stratum bridge:
 
-    FIRECASH_MERGED_MINING=1   (env on the stratum bridge)
+    ZKAS_MERGED_MINING=1                          (enable AuxPoW mode)
+    ZKAS_KASPA_NODE=127.0.0.1:16215               (a real Kaspa node's gRPC)
+    ZKAS_KASPA_PAY=kaspa:qz9v...                  (where KAS rewards are paid)
 
-  When set, the bridge decorates the node RPC (bridge/src/merged.rs,
-  bridge/src/kaspaapi.rs):
+  (The legacy FIRECASH_* names are still read for pre-rebrand service files.)
+
+  When ZKAS_MERGED_MINING is set, the bridge decorates the node RPC
+  (bridge/src/merged.rs, bridge/src/kaspaapi.rs):
     - get_block_template hands the ASIC a PARENT block that already commits to
       the current ZKas H_fc, with parent bits = ZKas's target.
     - submit_block turns a solved parent back into a ZKas aux block and
@@ -177,16 +182,26 @@ This reference pool (fork of Nacho-the-Kat/katpool) ships an opt-in merged path:
   The stratum/job/share core is untouched, so the native ASIC path cannot
   regress. Miners connect and hash exactly as before.
 
-  IMPORTANT CAVEAT — synthetic vs. real Kaspa parent:
-  Out of the box the "parent" the bridge builds is SYNTHETIC (ZKas-only).
-  That proves the aux path end to end, but the miner earns only ZKas — there
-  is no Kaspa reward, because the parent is not submitted to Kaspa. To get TRUE
-  dual-chain merged mining (Kaspa + ZKas from one hash):
-     (a) pull the parent template from a real Kaspa node, insert FCMM||H_fc into
-         its coinbase extra_data, and submit winning parents to BOTH Kaspa (as a
-         Kaspa block) and ZKas (as an aux block);
-     (b) make the payout accountant track the parent hash in merged mode.
-  Until (a)+(b) are done, run merged mode for validation only, not for revenue.
+  REAL DUAL-CHAIN MERGED MINING IS NOW WIRED (tested live 2026-07-15):
+  When ZKAS_KASPA_NODE + ZKAS_KASPA_PAY are set, the bridge pulls the parent
+  template from the REAL Kaspa node (fetch_kaspa_parent in kaspaapi.rs), embeds
+  FCMM||H_fc in its coinbase extra_data, and a solved parent is submitted to
+  BOTH chains — Kaspa (earning KAS at ZKAS_KASPA_PAY) and ZKas (as an aux block).
+  One hash, two rewards. Verified on the live network: ZKas blocks accepted by
+  the node with merged mode enabled and a real Kaspa parent.
+
+    - If ZKAS_KASPA_NODE/PAY are UNSET or the Kaspa node is unreachable (e.g.
+      still doing IBD), the bridge logs it and falls back to a SYNTHETIC parent:
+      ZKas aux blocks keep flowing (the chain stays live) but that round earns no
+      KAS. So a Kaspa node that is still syncing degrades gracefully to ZKas-only.
+    - The payout accountant tracks each parent hash in merged mode, so KAS and
+      ZKas rewards are attributed to the solving worker.
+
+  OPERATIONAL NOTE (learned the hard way): the bridge's `kaspad_address` (the
+  PRIMARY / ZKas node it mines) must speak the SAME address HRP as the coinbase
+  address you pay. A pre-rebrand node that only knows `firecash:` will reject a
+  `zkas:` coinbase with "invalid prefix zkas" and every template fetch fails.
+  Point the bridge at a node built from the same (post-rebrand) consensus.
 
 
 -------------------------------------------------------------------------------
@@ -266,6 +281,8 @@ TWO WAYS MONEY LEAVES THE POOL (accountant/src/payout.rs: PayoutTrigger):
     additionally submit merged (AuxPoW) solutions built on a Kaspa parent; native
     keeps working unchanged. (If a future relaunch gates it to a DAA score, aux is
     accepted only at/after that score.)
-  - For real Kaspa+ZKas dual rewards you must feed a real Kaspa template and
-    submit winning parents to both chains (section 6 caveat).
+  - Real Kaspa+ZKas dual rewards are now built in: set ZKAS_MERGED_MINING=1 plus
+    ZKAS_KASPA_NODE + ZKAS_KASPA_PAY and the bridge feeds a real Kaspa template and
+    submits winning parents to both chains automatically (section 6). A Kaspa node
+    still in IBD falls back to ZKas-only until it finishes syncing.
 ===============================================================================
