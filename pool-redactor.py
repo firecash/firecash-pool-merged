@@ -96,6 +96,28 @@ def sample():
         vals = [float(v) for v in rx.findall(text)]
         return max(vals) if vals else 0.0
 
+    # The stratum bridge already computes a session-aware per-worker hashrate,
+    # share count and current difficulty. Our own Δ(share-diff)/Δt is unreliable
+    # for miners that reconnect often (each reconnect adds a new ip-labelled
+    # Prometheus series, so the max-aggregated counter is non-monotonic and the
+    # rate flaps to 0). So we PREFER the bridge's value and only fall back to our
+    # computed rate when the bridge has none.
+    bridge_by_key = {}
+    try:
+        braw = urllib.request.urlopen("http://127.0.0.1:3033/api/stats", timeout=5).read().decode()
+        for bw in (json.loads(braw).get("workers") or []):
+            w = bw.get("wallet")
+            wk = bw.get("worker") or "—"
+            if not w:
+                continue
+            bridge_by_key[(w, wk)] = {
+                "hr": float(bw.get("hashrate") or 0.0),          # GH/s
+                "shares": int(bw.get("shares") or 0),
+                "diff": bw.get("currentDifficulty"),
+            }
+    except Exception:
+        pass
+
     now = time.time()
     workers = []
     for k, cur in diff.items():
@@ -107,43 +129,38 @@ def sample():
         dq.append((now, cur))
         while len(dq) > 1 and now - dq[0][0] > WINDOW_SECS:
             dq.popleft()
-        # Hashrate = Δ(share-difficulty) · 2^32 / Δt over the rolling window (smooth,
-        # and non-zero for any worker that shared within the window → correct active count).
+        # Fallback hashrate = Δ(share-difficulty) · 2^32 / Δt over the rolling window.
         hr_ghs = 0.0
         if len(dq) >= 2:
             ot, od = dq[0]
             dt = now - ot
             if dt > 0 and cur >= od:
                 hr_ghs = (cur - od) * TWO32 / dt / 1e9
+        b = bridge_by_key.get(k)
+        hr_final = b["hr"] if (b and b["hr"] > 0) else hr_ghs   # prefer bridge, session-aware
         workers.append({
             "worker": worker or "—",
             "wallet": wallet,
-            "hashrate": hr_ghs,                 # GH/s
-            "shares": int(shares.get(k, 0)),
+            "hashrate": hr_final,               # GH/s
+            "shares": int(shares.get(k, 0)) or (b["shares"] if b else 0),
+            "difficulty": b["diff"] if b else None,
         })
     # Also surface workers that are CONNECTED at the bridge but have not landed a
     # valid share yet (e.g. a small rig stuck on too-high difficulty, or one that
     # just connected). Prometheus only emits a series once a worker shares, so
     # without this they connect but never appear in the dashboard / miner lookup.
     seen = {(w["wallet"], w["worker"]) for w in workers}
-    try:
-        braw = urllib.request.urlopen("http://127.0.0.1:3033/api/stats", timeout=5).read().decode()
-        for bw in (json.loads(braw).get("workers") or []):
-            wallet = bw.get("wallet")
-            worker = bw.get("worker") or "—"
-            if not wallet or (wallet, worker) in seen:
-                continue
-            seen.add((wallet, worker))
-            workers.append({
-                "worker": worker,
-                "wallet": wallet,
-                "hashrate": 0.0,                       # no valid share yet → warming up
-                "shares": int(bw.get("shares") or 0),
-                "difficulty": bw.get("currentDifficulty"),
-                "warmingUp": True,
-            })
-    except Exception:
-        pass
+    for (wallet, worker), b in bridge_by_key.items():
+        if (wallet, worker) in seen:
+            continue
+        workers.append({
+            "worker": worker,
+            "wallet": wallet,
+            "hashrate": b["hr"],                       # bridge rate (may be 0 = warming up)
+            "shares": b["shares"],
+            "difficulty": b["diff"],
+            "warmingUp": b["hr"] <= 0,
+        })
 
     # drop workers gone since last scrape
     live = set(diff.keys())
